@@ -49,12 +49,21 @@ int main(int argc, char **argv)
 	goto nonprintable;
     while (1) {
 	// Printable characters...
+	int questionMarks = 0;
 	while (1) {
 	    switch (c) {
+	    case '?':
+		// Quote successive question marks starting with
+		// the second one, to avoid trigraphs.
+		if (questionMarks++)
+		    putchar('\\');
+		putchar('?');
+		break;
 	    case '"': case '\\':
 		putchar('\\');
 		// fall through
 	    default:
+		questionMarks = 0;
 		putchar(c);
 	    }
 	    c = *p++;
