@@ -16,8 +16,12 @@ RPM_OPT_FLAGS ?= -O2 -g -Wall
 # zstd -> BUILD/zstd-1.1.4
 ZSTD_ADD = -Izstd/lib/dictBuilder zstd/lib/libzstd.a
 
-all: train rpmhdr.zstdict
+all: train blob2inc rpmhdr.zstdict rpmhdrdict.h
 train: train.c
 	$(CC) $(RPM_OPT_FLAGS) $^ $(ZSTD_ADD) -o $@
 rpmhdr.zstdict: train
 	xzcat -dc $(LISTS) |./train >rpmhdr.zstdict
+blob2inc: blob2inc.c
+	$(CC) $(RPM_OPT_FLAGS) $^ -o $@
+rpmhdrdict.h: blob2inc rpmhdr.zstdict
+	./blob2inc rpmhdrdict <rpmhdr.zstdict >rpmhdrdict.h
