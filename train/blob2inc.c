@@ -19,30 +19,64 @@
 // SOFTWARE.
 
 // This program converts a blob into a C header.
-// Usage: blob2inc arrayName <blob >hdr.h
+// Usage: blob2inc [-z] [-Z] arrayName <blob >hdr.h
+//	  -z  compress with LZ4
+//	  -Z  make zpkglist dictionary frame
 
 #include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+#include <unistd.h>
 #include <assert.h>
 #include <sys/stat.h>
+#include <endian.h>
+#include <lz4hc.h>
 
 // ASCII range from ' ' to '~'.
 #define xisprint(c) ((unsigned)(c)-' ' <= '~'-' ')
 
 int main(int argc, char **argv)
 {
-    assert(argc == 2);
+    bool compress = false;
+    int frameSize = 0;
+    int opt;
+    while ((opt = getopt(argc, argv, "zZ")) != -1) {
+	switch (opt) {
+	case 'Z': frameSize = 8; // fall through
+	case 'z': compress = 1; break;
+	default: return 1;
+	}
+    }
+    argc -= optind, argv += optind;
+    assert(argc == 1);
+    const char *arrayName = argv[0];
     struct stat st;
     int rc = fstat(fileno(stdin), &st);
     assert(rc == 0);
-    assert(st.st_size > 0);
-    assert(st.st_size <= (1 << 20));
-    unsigned char buf[st.st_size+1];
-    size_t ret = fread(buf, 1, st.st_size+1, stdin);
-    assert(ret == st.st_size);
-    unsigned char *end = buf + st.st_size;
-    *end = '\0';
-    printf("static const char %s[%d] = {\n", argv[1], (int) st.st_size);
+    size_t arraySize = st.st_size;
+    assert(arraySize > 0);
+    assert(arraySize <= (1 << 20));
+    unsigned char buf[arraySize+1];
+    size_t ret = fread(buf, 1, arraySize+1, stdin);
+    assert(ret == arraySize);
+    if (compress) {
+	int zsize = LZ4_COMPRESSBOUND(arraySize);
+	unsigned char zbuf[zsize];
+	zsize = LZ4_compress_HC((void *) buf, (void *) zbuf, arraySize, zsize, LZ4HC_CLEVEL_MAX);
+	assert(zsize > 0);
+	assert(frameSize + zsize < arraySize);
+	if (frameSize) {
+	    unsigned frame[] = { htole32(0x184D2A56), htole32(zsize) };
+	    assert(frameSize == sizeof frame);
+	    memcpy(buf, frame, frameSize);
+	}
+	memcpy(buf + frameSize, zbuf, zsize);
+	arraySize = frameSize + zsize;
+    }
     unsigned char *p = buf;
+    unsigned char *end = buf + arraySize;
+    *end = '\0';
+    printf("static const char %s[%zu] = {\n", arrayName, arraySize);
     unsigned char c = *p++;
     putchar('"');
     if (!xisprint(c))
