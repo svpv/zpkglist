@@ -23,6 +23,7 @@
 // there is no need to split them into separate files.
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
@@ -61,48 +62,56 @@ static long headerDataSize(char *blob)
 
 static void load(void)
 {
+    char lead[16];
+
+    // Peak at the first header.
+    size_t ret = fread(lead, 1, 16, stdin);
+    assert(ret == 16);
+
+    // The size of the header's data after (il,dl).
+    size_t dataSize = headerDataSize(lead);
+
     char *buf = samples.samplesBuffer;
     const char *end = buf + sizeof samples.samplesBuffer;
-    // Combines two headers into a single sample, much like zhdlist.
+
     while (1) {
-	char lead[16];
-	// Peak at the first header.
-	size_t ret = fread(lead, 1, 16, stdin);
-	if (ret == 0)
-	    break;
-	assert(ret == 16);
-	// Place only the sizes, no magic.
-	char *p = buf;
-	assert(p + 8 < end);
-	memcpy(p, lead + 8, 8);
-	p += 8;
-	// Read the first header's data.
-	long dataSize = headerDataSize(lead);
-	assert(p + dataSize <= end);
-	ret = fread(p, 1, dataSize, stdin);
-	assert(ret == dataSize);
-	p += dataSize;
-	// Peak at the second header.
-	ret = fread(lead, 1, 16, stdin);
-	if (ret) {
-	    assert(ret == 16);
-	    // Place only the sizes, no magic.
-	    assert(p + 8 < end);
-	    memcpy(p, lead + 8, 8);
-	    p += 8;
-	    // Read the second header's data.
+	char *cur = buf;
+	bool eof = false;
+	// Trying to fit four headers into 256K.
+	for (int i = 0; i < 4; i++) {
+	    // Put this header's leading bytes.
+	    // The very first magic won't be written.
+	    if (i == 0) {
+		memcpy(cur, lead + 8, 8);
+		cur += 8;
+	    }
+	    else {
+		memcpy(cur, lead, 16);
+		cur += 16;
+	    }
+	    // Read this header's data + the next header's leading bytes.
+	    assert(cur + dataSize + 16 <= end);
+	    ret = fread(cur, 1, dataSize + 16, stdin);
+	    cur += dataSize;
+	    if (ret == dataSize) {
+		eof = true;
+		break;
+	    }
+	    assert(ret == dataSize + 16);
+	    // Save the next header's leading bytes for the next iteration.
+	    memcpy(lead, cur, 16);
+	    // The next header is for the next iteration.
 	    dataSize = headerDataSize(lead);
-	    assert(p + dataSize <= end);
-	    ret = fread(p, 1, dataSize, stdin);
-	    assert(ret == dataSize);
-	    p += dataSize;
+	    // Does the next header fit in?
+	    if (cur - buf + dataSize > (256 << 10))
+		break;
 	}
-	size_t fill = p - buf;
+	size_t fill = cur - buf;
 	if (fill > maxSampleSize)
 	    fill = maxSampleSize;
 	buf += fill;
 	samples.samplesSizes[samples.nbSamples++] = fill;
-	if (ret == 0)
+	if (eof)
 	    break;
 #if 0	// Ain't got time to die, the whole thing takes 2 hours.
 	if (samples.nbSamples > 999)
