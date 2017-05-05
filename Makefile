@@ -10,3 +10,12 @@ header.o: header.c header.h
 	$(CC) $(RPM_OPT_FLAGS) -fpic -c $<
 zpkglist: main.c zpkglist.h libzpkglist.a
 	$(CC) $(RPM_OPT_FLAGS) $< -o $@ libzpkglist.a -llz4
+DESTDIR =
+PREFIX = /usr
+BINDIR = $(PREFIX)/bin
+INCLUDEDIR = $(PREFIX)/include
+LIBDIR = `getconf LIBDIR`
+install: all zpkglist.h
+	install -pD -m755 {,$(DESTDIR)$(BINDIR)/}zpkglist
+	install -pD -m644 {,$(DESTDIR)$(INCLUDEDIR)/}zpkglist.h
+	install -pD -m644 {,$(DESTDIR)$(LIBDIR)/}libzpkglist.a
