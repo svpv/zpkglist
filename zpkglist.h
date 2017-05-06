@@ -38,6 +38,22 @@ int zpkglistCompress(int in, int out, const char *err[2],
 		     void (*hash)(void *buf, unsigned size, void *arg), void *arg)
 		     __attribute__((nonnull(3)));
 
+// For decompression, a more general "Reader" API is provided.
+// It can also be used to iterate uncompressed header lists.
+struct zpkglistReader;
+// Returns 1 on success, 0 on EOF at the beginning of input
+// (no headers, the Reader handle is not created), -1 on error.
+// On success, the Reader handle is returned via zp.
+int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
+		   __attribute__((nonnull));
+void zpkglistClose(struct zpkglistReader *z);
+
+// Read a buffer.  Header boundaries are not preserved.
+// The pointer to internal memory is returned via bufp.
+// Returns the number of bytes read, 0 on EOF, -1 on error.
+int zpkglistReadBuf(struct zpkglistReader *z, void **bufp, const char *err[2])
+		    __attribute__((nonnull));
+
 #ifdef __cplusplus
 }
 #endif
