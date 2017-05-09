@@ -28,10 +28,15 @@ extern "C" {
 #endif
 
 // Compress a list of rpm headers, such as produced by genpkglist,
-// into zpkglist file format (see README.md).
-bool zpkglistCompress(int in, int out, const char *err[2],
-		      void (*hash)(void *buf, unsigned size, void *arg), void *arg)
-		      __attribute__((nonnull(3)));
+// into zpkglist file format (see README.md).  Returns 1 on success,
+// 0 on empty input (with valid output still written), -1 on error.
+// Information about an error is returned via the err[2] parameter:
+// the first string is typically a function name, and the second is
+// a string which describes the error.  Both strings normally come
+// from the read-only data section.
+int zpkglistCompress(int in, int out, const char *err[2],
+		     void (*hash)(void *buf, unsigned size, void *arg), void *arg)
+		     __attribute__((nonnull(3)));
 
 #ifdef __cplusplus
 }

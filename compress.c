@@ -227,45 +227,49 @@ static bool zLoop(struct Z *z, struct stats *stats, int in, int out, const char 
     return true;
 }
 
-bool zpkglistCompress(int in, int out, const char *err[2],
-		      void (*hash)(void *buf, unsigned size, void *arg), void *arg)
+int zpkglistCompress(int in, int out, const char *err[2],
+		     void (*hash)(void *buf, unsigned size, void *arg), void *arg)
 {
     // Verify the output fd.
     struct stat st;
     if (fstat(out, &st) < 0)
-	return ERRNO("fstat"), false;
+	return ERRNO("fstat"), -1;
     if (!S_ISREG(st.st_mode))
-	return ERRSTR("output not a regular file"), false;
+	return ERRSTR("output not a regular file"), -1;
     if (st.st_size)
-	return ERRSTR("output file not empty"), false;
+	return ERRSTR("output file not empty"), -1;
     if (lseek(out, 0, SEEK_CUR) != 0)
-	return ERRSTR("output file not positioned at the beginning"), false;
+	return ERRSTR("output file not positioned at the beginning"), -1;
 
     // Prepare the leading frame.
     unsigned frame[] = { htole32(0x184D2A55), htole32(16), 0, 0, 0, 0 };
     if (!xwrite(out, frame, sizeof frame))
-	return ERRNO("write"), false;
+	return ERRNO("write"), -1;
 
     // Compress.
     struct Z *z = zNew(err);
     if (!z)
-	return false;
+	return -1;
     struct stats stats = { 0, 0, 0 };
     if (!zLoop(z, &stats, in, out, err, hash, arg)) {
 	zFree(z);
-	return false;
+	return -1;
     }
     zFree(z);
 
+    // Empty input?
+    if (stats.total == 0)
+	return 0;
+
     // Rewrite the leading frame.
     if (stats.total > ~0U)
-	return ERRSTR("output too big"), false;
+	return ERRSTR("output too big"), -1;
     if (lseek(out, 0, SEEK_SET) != 0)
-	return ERRNO("lseek"), false;
+	return ERRNO("lseek"), -1;
     frame[2] = htole32(stats.total);
     frame[4] = htole32(stats.maxSize);
     frame[5] = htole32(stats.zmaxSize);
     if (!xwrite(out, frame, sizeof frame))
-	return ERRNO("write"), false;
-    return true;
+	return ERRNO("write"), -1;
+    return 1;
 }
