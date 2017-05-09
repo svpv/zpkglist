@@ -21,6 +21,7 @@
 // RPM header utilities.
 
 #include <stdbool.h>
+#include <string.h>
 
 #pragma GCC visibility push(hidden)
 
@@ -29,7 +30,7 @@
 
 // A header starts with magic (8 bytes) + (il,dl) sizes (8 bytes).
 extern const unsigned char headerMagic[8];
-bool headerCheckMagic(char lead[16]);
+#define headerCheckMagic(lead) (memcmp(lead, headerMagic, 8) == 0)
 
 // Returns the size of header's data after (il,dl).
 int headerDataSize(char lead[16]);

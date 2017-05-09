@@ -1,8 +1,10 @@
 RPM_OPT_FLAGS ?= -O2 -g -Wall
 all: libzpkglist.a zpkglist
-libzpkglist.a: compress.o xread.o header.o
+libzpkglist.a: compress.o error.o xread.o header.o
 	$(AR) r $@ $^
-compress.o: compress.c zpkglist.h xread.h header.h train/rpmhdrdict.h train/rpmhdrzdict.h
+compress.o: compress.c zpkglist.h error.h xread.h header.h train/rpmhdrdict.h train/rpmhdrzdict.h
+	$(CC) $(RPM_OPT_FLAGS) -fpic -c $<
+error.o: error.c error.h
 	$(CC) $(RPM_OPT_FLAGS) -fpic -c $<
 xread.o: xread.c xread.h
 	$(CC) $(RPM_OPT_FLAGS) -fpic -c $<

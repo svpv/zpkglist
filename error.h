@@ -18,25 +18,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <stdio.h>
-#include <string.h>
-#include <arpa/inet.h>
-#include "header.h"
+#include <errno.h>
 
-const unsigned char headerMagic[8] = {
-    0x8e, 0xad, 0xe8, 0x01, 0x00, 0x00, 0x00, 0x00
-};
+#pragma GCC visibility push(hidden)
 
-int headerDataSize(char lead[16])
-{
-    unsigned *ei = (unsigned *) (lead + 8);
-    unsigned il = ntohl(ei[0]);
-    unsigned dl = ntohl(ei[1]);
-    // Check for overflows.
-    if (il > headerMaxSize / 16 || dl > headerMaxSize)
-	return -1;
-    size_t dataSize = 16 * il + dl;
-    if (dataSize == 0 || 8 + dataSize > headerMaxSize)
-	return -1;
-    return dataSize;
-}
+// A thread-safe strerror(3) replacement.
+const char *xstrerror(int errnum);
+
+// Helpers to fill err[2] arg.
+#define ERRNO(func) err[0] = func, err[1] = xstrerror(errno)
+#define ERRSTR(str) err[0] = __func__, err[1] = str
+#define ERROR(func, str) err[0] = func, err[1] = str
+
+#pragma GCC visibility pop

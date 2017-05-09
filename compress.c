@@ -25,14 +25,12 @@
 #include <assert.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <errno.h>
 #include <endian.h>
 #include <lz4.h>
 #include "zpkglist.h"
+#include "error.h"
 #include "xread.h"
 #include "header.h"
-
-#define PROG "zpkglist"
 
 struct Z {
     // The clean LZ4 state is initialized only once.  (This is a relatively
@@ -49,13 +47,11 @@ struct Z {
 #include "train/rpmhdrdict.h"
 #include "train/rpmhdrzdict.h"
 
-static struct Z *zNew(void)
+static struct Z *zNew(const char *err[2])
 {
     struct Z *z = malloc(sizeof *z);
-    if (!z) {
-	fprintf(stderr, PROG ": %s: %m\n", "malloc");
-	return NULL;
-    }
+    if (!z)
+	return ERRNO("malloc"), NULL;
     // Initialize the clean state.
     memset(&z->stream0, 0, sizeof z->stream0);
     // Preload the dictionary.
@@ -74,7 +70,7 @@ static struct Z *zNew(void)
 // the first allocation.  Explores the technique of placing the dictionary
 // right before the data to be compressed, which speeds up compression with
 // the dictionary by a factor of 1.4.
-static bool zMoreBuf(struct Z *z, size_t size)
+static bool zMoreBuf(struct Z *z, size_t size, const char *err[2])
 {
     // z->buf and z->zbuf are allocated in a single chunk.
     // The dictionary is placed right before z->buf.
@@ -89,10 +85,8 @@ static bool zMoreBuf(struct Z *z, size_t size)
     // Compressed frames start with a frame header.
     z->zbufSize = 12 + LZ4_COMPRESSBOUND(z->bufSize);
     char *buf = malloc((64 << 10) + z->bufSize + z->zbufSize);
-    if (!buf) {
-	fprintf(stderr, PROG ": %s: %m\n", "malloc");
-	return false;
-    }
+    if (!buf)
+	return ERRNO("malloc"), false;
     z->buf = buf + (64 << 10);
     z->zbuf = z->buf + z->bufSize;
     // Copy the dictionary.
@@ -125,35 +119,35 @@ struct stats {
     unsigned zmaxSize;
 };
 
-static bool zLoop(struct Z *z, struct stats *stats, int in, int out,
+static bool zLoop(struct Z *z, struct stats *stats, int in, int out, const char *err[2],
 		  void (*hash)(void *buf, unsigned size, void *arg), void *arg)
 {
     // Load the leading bytes of the first header.
     char lead[16];
     int ret = xread(in, lead, 16);
     // If it's EOF or an error, do nothing.
-    if (ret <= 0)
-	return ret;
-    if (ret < 16) {
-	fprintf(stderr, PROG ": unexpected EOF\n");
-	return false;
-    }
+    if (ret < 0)
+	return ERRNO("read"), false;
+    if (ret == 0)
+	return true;
+    if (ret < 16)
+	return ERRSTR("unexpected EOF"), false;
     if (!headerCheckMagic(lead))
-	return false;
+	return ERRSTR("bad header magic"), false;
 
     // The size of the header's data after (il,dl).
     int dataSize = headerDataSize(lead);
     if (dataSize < 0)
-	return false;
+	return ERRSTR("bad header size"), false;
 
     // Write the dictionary.
     if (!xwrite(out, rpmhdrzdict, sizeof rpmhdrzdict))
-	return false;
+	return ERRNO("write"), false;
 
     while (1) {
 	// Minimum buffer size is 1M, no need to reallocate in the inner loop.
 	size_t needBufSize = 8 + dataSize + 16;
-	if (needBufSize > z->bufSize && !zMoreBuf(z, needBufSize))
+	if (needBufSize > z->bufSize && !zMoreBuf(z, needBufSize, err))
 	    return false;
 
 	char *cur = z->buf;
@@ -174,26 +168,24 @@ static bool zLoop(struct Z *z, struct stats *stats, int in, int out,
 	    // Read this header's data + the next header's leading bytes.
 	    ret = xread(in, cur, dataSize + 16);
 	    if (ret < 0)
-		return false;
+		return ERRNO("read"), false;
 	    cur += dataSize;
 	    if (ret == dataSize) {
 		eof = true;
 		break;
 	    }
-	    if (ret != dataSize + 16) {
-		fprintf(stderr, PROG ": unexpected EOF\n");
-		return false;
-	    }
+	    if (ret != dataSize + 16)
+		return ERRSTR("unexpected EOF"), false;
 	    // Save the next header's leading bytes for the next iteration.
 	    memcpy(lead, cur, 16);
 	    // Verify the next header's magic - otherwise, we aren't even sure
 	    // we got the right size.
 	    if (!headerCheckMagic(lead))
-		return false;
+		return ERRSTR("bad header magic"), false;
 	    // The next header is for the next iteration.
 	    dataSize = headerDataSize(lead);
 	    if (dataSize < 0)
-		return false;
+		return ERRSTR("bad header size"), false;
 	    // Does the next header fit in?
 	    if (cur - z->buf + dataSize > (256 << 10))
 		break;
@@ -215,15 +207,13 @@ static bool zLoop(struct Z *z, struct stats *stats, int in, int out,
 	zBegin(z);
 	int zsize = LZ4_compress_fast_continue(&z->stream, z->buf, z->zbuf + 12,
 					       fill, z->zbufSize - 12, 1);
-	if (zsize < 1) {
-	    fprintf(stderr, PROG ": %s failed\n", "LZ4_compress_fast_continue");
-	    return false;
-	}
+	if (zsize < 1)
+	    return ERROR("LZ4_compress_fast_continue", "compression failed"), false;
 	// Write the frame, along with the frame header.
 	unsigned frameHeader[] = { htole32(0x184D2A57), htole32(zsize), htole32(fill) };
 	memcpy(z->zbuf, frameHeader, 12);
 	if (!xwrite(out, z->zbuf, 12 + zsize))
-	    return false;
+	    return ERRNO("write"), false;
 	// Update the stats.
 	stats->total += fill;
 	if (stats->maxSize < fill)
@@ -237,56 +227,45 @@ static bool zLoop(struct Z *z, struct stats *stats, int in, int out,
     return true;
 }
 
-bool zpkglistCompress(int in, int out, void (*hash)(void *buf, unsigned size, void *arg), void *arg)
+bool zpkglistCompress(int in, int out, const char *err[2],
+		      void (*hash)(void *buf, unsigned size, void *arg), void *arg)
 {
     // Verify the output fd.
     struct stat st;
-    if (fstat(out, &st) < 0) {
-	fprintf(stderr, PROG ": %s: %m\n", "fstat");
-	return false;
-    }
-    if (!S_ISREG(st.st_mode)) {
-	fprintf(stderr, PROG ": output not a regular file\n");
-	return false;
-    }
-    if (st.st_size) {
-	fprintf(stderr, PROG ": output file not empty\n");
-	return false;
-    }
-    if (lseek(out, 0, SEEK_CUR) != 0) {
-	fprintf(stderr, PROG ": output file not positioned at the beginning\n");
-	return false;
-    }
+    if (fstat(out, &st) < 0)
+	return ERRNO("fstat"), false;
+    if (!S_ISREG(st.st_mode))
+	return ERRSTR("output not a regular file"), false;
+    if (st.st_size)
+	return ERRSTR("output file not empty"), false;
+    if (lseek(out, 0, SEEK_CUR) != 0)
+	return ERRSTR("output file not positioned at the beginning"), false;
 
     // Prepare the leading frame.
     unsigned frame[] = { htole32(0x184D2A55), htole32(16), 0, 0, 0, 0 };
     if (!xwrite(out, frame, sizeof frame))
-	return false;
+	return ERRNO("write"), false;
 
     // Compress.
-    struct Z *z = zNew();
+    struct Z *z = zNew(err);
     if (!z)
 	return false;
     struct stats stats = { 0, 0, 0 };
-    if (!zLoop(z, &stats, in, out, hash, arg)) {
+    if (!zLoop(z, &stats, in, out, err, hash, arg)) {
 	zFree(z);
 	return false;
     }
     zFree(z);
 
     // Rewrite the leading frame.
-    if (stats.total > ~0U) {
-	fprintf(stderr, PROG ": output too big\n");
-	return false;
-    }
-    if (lseek(out, 0, SEEK_SET) != 0) {
-	fprintf(stderr, PROG ": %s: %m\n", "lseek");
-	return false;
-    }
+    if (stats.total > ~0U)
+	return ERRSTR("output too big"), false;
+    if (lseek(out, 0, SEEK_SET) != 0)
+	return ERRNO("lseek"), false;
     frame[2] = htole32(stats.total);
     frame[4] = htole32(stats.maxSize);
     frame[5] = htole32(stats.zmaxSize);
     if (!xwrite(out, frame, sizeof frame))
-	return false;
+	return ERRNO("write"), false;
     return true;
 }

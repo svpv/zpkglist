@@ -29,7 +29,9 @@ extern "C" {
 
 // Compress a list of rpm headers, such as produced by genpkglist,
 // into zpkglist file format (see README.md).
-bool zpkglistCompress(int in, int out, void (*hash)(void *buf, unsigned size, void *arg), void *arg);
+bool zpkglistCompress(int in, int out, const char *err[2],
+		      void (*hash)(void *buf, unsigned size, void *arg), void *arg)
+		      __attribute__((nonnull(3)));
 
 #ifdef __cplusplus
 }

@@ -25,8 +25,6 @@
 #include <errno.h>
 #include "xread.h"
 
-#define PROG "zpkglist"
-
 // Reads up to size bytes.
 int xread(int fd, void *buf, size_t size)
 {
@@ -39,7 +37,6 @@ int xread(int fd, void *buf, size_t size)
 	if (ret < 0) {
 	    if (errno == EINTR)
 		continue;
-	    fprintf(stderr, PROG ": %s: %m\n", "read");
 	    return -1;
 	}
 	if (ret == 0)
@@ -63,12 +60,12 @@ bool xwrite(int fd, const void *buf, size_t size)
 	if (ret < 0) {
 	    if (errno == EINTR)
 		continue;
-	    fprintf(stderr, PROG ": %s: %m\n", "write");
 	    return false;
 	}
 	if (ret == 0) {
 	    if (zero) {
-		fprintf(stderr, PROG ": write returns 0\n");
+		// write keeps returning zero
+		errno = EAGAIN;
 		return false;
 	    }
 	    zero = true;
