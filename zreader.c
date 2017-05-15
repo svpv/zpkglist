@@ -131,11 +131,11 @@ static int zReadBuf(union u *u, void **bufp, const char *err[2])
     else if (ret != zsize + 12)
 	return ERRSTR("unexpected EOF"), -1;
     else {
+	// Save the next frame's header for the next call.
+	memcpy(z->lead, z->zbuf + zsize, 12);
 	// Peek at the next frame's header.
 	if (le32toh(z->lead[0]) != 0x184D2A57)
 	    return ERRSTR("bad data frame magic"), -1;
-	// Save the next frame's header for the next call.
-	memcpy(z->lead, z->zbuf + zsize, 12);
     }
     // Restore the last bytes of the dictionary.
     memcpy(z->buf - 8, z->save, 8);
