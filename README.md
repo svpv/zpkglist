@@ -37,6 +37,9 @@ magic 0x184D2A57 | compressed size | uncompressed size |  compressed data
 ```
 Frame data is compressed with LZ4 using the dictionary.
 
+The compressed size field takes into account the uncompressed size field;
+technically, the latter comes on behalf of the skippable frame's payload.
+
 ### RPM header blobs
 ```
  <il,dl>  |   header data    || rpm header magic |  <il,dl>  |   header data

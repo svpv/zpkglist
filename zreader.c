@@ -53,7 +53,7 @@ int zInit(struct zReader *z, int fd, char lead[16], const char *err[2])
     // Peek at the dictionary frame.
     if (le32toh(w[2]) != 0x184D2A56)
 	return ERRSTR("bad dictionary magic"), -1;
-    size_t zsize = le32toh(w[3]);
+    size_t zsize = le32toh(w[3]) - 4;
     if (!zsize || zsize >= (64 << 10))
 	return ERRSTR("bad dictionary zsize"), -1;
     // The input is not empty, there's a dictionary.  Permit the situation
@@ -116,7 +116,7 @@ static int zReadBuf(union u *u, void **bufp, const char *err[2])
     if (z->eof)
 	return 0;
     // The frame has already been peeked upon, validate the sizes.
-    size_t zsize = le32toh(z->lead[1]);
+    size_t zsize = le32toh(z->lead[1]) - 4;
     size_t size = le32toh(z->lead[2]);
     if (!size || size > z->maxSize)
 	return ERRSTR("bad data size"), -1;

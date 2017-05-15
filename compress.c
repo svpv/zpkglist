@@ -210,7 +210,7 @@ static bool zLoop(struct Z *z, struct stats *stats, int in, int out, const char 
 	if (zsize < 1)
 	    return ERROR("LZ4_compress_fast_continue", "compression failed"), false;
 	// Write the frame, along with the frame header.
-	unsigned frameHeader[] = { htole32(0x184D2A57), htole32(zsize), htole32(fill) };
+	unsigned frameHeader[] = { htole32(0x184D2A57), htole32(zsize + 4), htole32(fill) };
 	memcpy(z->zbuf, frameHeader, 12);
 	if (!xwrite(out, z->zbuf, 12 + zsize))
 	    return ERRNO("write"), false;
