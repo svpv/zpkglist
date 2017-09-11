@@ -47,6 +47,7 @@ struct Z {
 #include "train/rpmhdrdict.h"
 #include "train/rpmhdrzdict.h"
 
+// The size of struct Z is 32K+, had better be malloc'd.
 static struct Z *zNew(const char *err[2])
 {
     struct Z *z = malloc(sizeof *z);
