@@ -19,6 +19,7 @@
 // SOFTWARE.
 
 #include <stdbool.h>
+#include "reada.h"
 
 #pragma GCC visibility push(hidden)
 
@@ -64,9 +65,38 @@ union u {
     struct zReader z;
 };
 
+struct zpkglistReader;
+
 struct ops {
-    int (*opReadBuf)(union u *u, void **bufp, const char *err[2]);
-    void (*opClose)(union u *u);
+    // Creating stream.
+    bool (*opOpen)(struct zpkglistReader *z, const char *err[2]);
+    void (*opClose)(struct zpkglistReader *z);
+    // Basic reading.
+    ssize_t (*opRead)(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
+    // Bulk reading, internal buffer.
+    ssize_t (*opBulk)(struct zpkglistReader *z, void **bufp, const char *err[2]);
+    // Header reading.
+    ssize_t (*opHdrSize)(struct zpkglistReader *z, const char *err[2]);
+    bool (*opHdrRead)(struct zpkglistReader *z, void *buf, const char *err[2]);
+    // Header reading, internal buffer.
+    ssize_t (*opHdrReadP)(struct zpkglistReader *z, void **bufp, const char *err[2]);
+    // Header position (before read), 0 = EOF or error or not supported.
+    unsigned (*opTell)(struct zpkglistReader *z);
+    bool (*opSeek)(struct zpkglistReader *z, unsigned pos, const char *err[2]);
+};
+
+extern const struct ops
+    ops_rpmheader,
+    ops_zpkglist,
+    ops_lz4,
+    ops_zstd,
+    ops_xz;
+
+struct zpkglistReader {
+    struct fda fda;
+    char fdabuf[NREADA];
+    const struct ops *ops;
+    void *opState;
 };
 
 extern struct ops aOps;
