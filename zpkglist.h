@@ -48,11 +48,17 @@ int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
 		   __attribute__((nonnull));
 void zpkglistClose(struct zpkglistReader *z);
 
-// Read a buffer.  Header boundaries are not preserved.
-// The pointer to internal memory is returned via bufp.
+// A lower-level method for reading the uncompressed byte stream.
+// Uncompressed data (such as header magic) is not validated.
 // Returns the number of bytes read, 0 on EOF, -1 on error.
-int zpkglistReadBuf(struct zpkglistReader *z, void **bufp, const char *err[2])
-		    __attribute__((nonnull));
+ssize_t zpkglistRead(struct zpkglistReader *z, void *buf, size_t size,
+	            const char *err[2]) __attribute__((nonnull));
+
+// Bulk reading of uncompressed data into the internal buffer,
+// e.g. for checksumming, with optimal buffer management.
+// Header boundaries are not preserved.
+ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp,
+		     const char *err[2]) __attribute__((nonnull));
 
 #ifdef __cplusplus
 }

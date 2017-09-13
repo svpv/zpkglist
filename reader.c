@@ -25,58 +25,63 @@
 #include <endian.h>
 #include "zpkglist.h"
 #include "reader.h"
-#include "xread.h"
+#include "reada.h"
 #include "error.h"
-#include "header.h"
+#include "magic4.h"
 
-struct zpkglistReader {
-    struct ops ops;
-    union u u;
+static const struct ops *allOps[] = {
+    /* The same order as magic4. */
+    &ops_rpmheader,
+    &ops_zpkglist,
+    &ops_lz4,
+    &ops_zstd,
+    &ops_xz,
 };
 
 int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
 {
-    char lead[16];
-    int ret = xread(fd, lead, 16);
-    if (ret < 0)
-	return ERRNO("read"), -1;
-    if (ret == 0)
-	return 0;
-    if (ret != 16)
-	return ERRSTR("unexpected EOF"), -1;
-    struct zpkglistReader *z = calloc(1, sizeof *z);
+    struct zpkglistReader *z = malloc(sizeof *z);
     if (!z)
 	return ERRNO("malloc"), -1;
-    // Dispatch according to the leading magic.
-    unsigned frameHeader[] = { htole32(0x184D2A55), htole32(16) };
-    if (memcmp(lead, frameHeader, 8) == 0) {
-	z->ops = zOps;
-	ret = zInit(&z->u.z, fd, lead, err);
-    }
-    else if (memcmp(lead, headerMagic, 8) == 0) {
-	z->ops = aOps;
-	ret = aInit(&z->u.a, fd, lead, err);
-    }
-    else {
-	ERRSTR("unknown file format");
-	ret = -1;
-    }
-    if (ret > 0)
-	*zp = z;
-    else
-	free(z);
-    return ret;
+
+    z->fda = (struct fda) { fd, z->fdabuf };
+
+    unsigned w;
+    int ret = peeka(&z->fda, &w, 4);
+    if (ret < 0)
+	return free(z), ERRNO("read"), -1;
+    if (ret == 0)
+	return free(z), 0;
+    if (ret < 4)
+	return free(z), ERRSTR("unexpected EOF"), -1;
+    assert(ret == 4);
+
+    enum magic4 m4 = magic4(w);
+    if (m4 == MAGIC4_UNKNOWN)
+	return free(z), ERRSTR("unknown magic"), -1;
+
+    z->ops = allOps[m4];
+
+    if (!z->ops->opOpen(z, err))
+	return free(z), -1;
+
+    return 1;
 }
 
 void zpkglistClose(struct zpkglistReader *z)
 {
-    if (!z)
-	return;
-    z->ops.opClose(&z->u);
+    assert(z);
+    z->ops->opClose(z);
     free(z);
 }
 
-int zpkglistReadBuf(struct zpkglistReader *z, void **bufp, const char *err[2])
+ssize_t zpkglistRead(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
 {
-    return z->ops.opReadBuf(&z->u, bufp, err);
+    assert(size > 0);
+    return z->ops->opRead(z, buf, size, err);
+}
+
+ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
+{
+    return z->ops->opBulk(z, bufp, err);
 }
