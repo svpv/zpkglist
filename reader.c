@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h> // close
 #include <endian.h>
 #include "zpkglist.h"
 #include "reader.h"
@@ -71,7 +72,8 @@ int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
 void zpkglistClose(struct zpkglistReader *z)
 {
     assert(z);
-    z->ops->opClose(z);
+    z->ops->opFree(z);
+    close(z->fda.fd);
     free(z);
 }
 

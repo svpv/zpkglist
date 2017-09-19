@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <stdint.h>
 #include <stdbool.h>
 #include "reada.h"
 
@@ -70,9 +71,12 @@ struct zpkglistReader;
 struct ops {
     // Creating stream.
     bool (*opOpen)(struct zpkglistReader *z, const char *err[2]);
-    void (*opClose)(struct zpkglistReader *z);
+    bool (*opReopen)(struct zpkglistReader *z, const char *err[2]);
+    void (*opFree)(struct zpkglistReader *z);
     // Basic reading.
     ssize_t (*opRead)(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
+    // Uncompressed size.
+    int64_t (*opContentSize)(struct zpkglistReader *z);
     // Bulk reading, internal buffer.
     ssize_t (*opBulk)(struct zpkglistReader *z, void **bufp, const char *err[2]);
     // Header reading.
