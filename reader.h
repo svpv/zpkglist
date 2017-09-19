@@ -24,28 +24,6 @@
 
 #pragma GCC visibility push(hidden)
 
-// Uncompressed reader state.
-struct aReader {
-    int fd;
-    bool eof;
-    // When a file has just been opened, its leading bytes
-    // are stored in the lead[].
-    bool justOpened;
-    char lead[16];
-    // The leading bytes of the next header is typically read and
-    // checked ahead of time.  This dataSize applies to the next header.
-    size_t dataSize;
-    // The buffer.
-    char *buf;
-    size_t bufSize;
-};
-
-int aInit(struct aReader *a, int fd, char lead[16], const char *err[2]);
-
-union u {
-    struct aReader a;
-};
-
 struct zpkglistReader;
 
 struct ops {
@@ -93,7 +71,5 @@ struct zpkglistReader {
 #define CAT_(x, y) x ## y
 #define CAT2(x, y) CAT_(x, y)
 #define CAT3(x, y, z) CAT2(x, CAT2(y, z))
-
-extern struct ops aOps;
 
 #pragma GCC visibility pop
