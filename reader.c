@@ -39,6 +39,26 @@ static const struct ops *allOps[] = {
     &ops_xz,
 };
 
+static int zpkglistBegin(struct fda *fda, const struct ops **opsp, const char *err[2])
+{
+    unsigned w;
+    ssize_t ret = peeka(fda, &w, 4);
+    if (ret < 0)
+	return ERRNO("read"), -1;
+    if (ret == 0)
+	return 0;
+    if (ret < 4)
+	return ERRSTR("unexpected EOF"), -1;
+    assert(ret == 4);
+
+    enum magic4 m4 = magic4(w);
+    if (m4 == MAGIC4_UNKNOWN)
+	return ERRSTR("unknown magic"), -1;
+
+    *opsp = allOps[m4];
+    return 1;
+}
+
 int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
 {
     struct zpkglistReader *z = malloc(sizeof *z);
@@ -47,25 +67,16 @@ int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
 
     z->fda = (struct fda) { fd, z->fdabuf };
 
-    unsigned w;
-    int ret = peeka(&z->fda, &w, 4);
-    if (ret < 0)
-	return free(z), ERRNO("read"), -1;
-    if (ret == 0)
-	return free(z), 0;
-    if (ret < 4)
-	return free(z), ERRSTR("unexpected EOF"), -1;
-    assert(ret == 4);
-
-    enum magic4 m4 = magic4(w);
-    if (m4 == MAGIC4_UNKNOWN)
-	return free(z), ERRSTR("unknown magic"), -1;
-
-    z->ops = allOps[m4];
+    int rc = zpkglistBegin(&z->fda, &z->ops, err);
+    if (rc <= 0)
+	return free(z), rc;
 
     if (!z->ops->opOpen(z, err))
 	return free(z), -1;
 
+    z->bulkBuf = NULL;
+
+    *zp = z;
     return 1;
 }
 
@@ -73,14 +84,63 @@ void zpkglistClose(struct zpkglistReader *z)
 {
     assert(z);
     z->ops->opFree(z);
+    free(z->bulkBuf);
     close(z->fda.fd);
     free(z);
 }
 
-ssize_t zpkglistRead(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
+static ssize_t zread1(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
+{
+    while (1) {
+	ssize_t n = z->ops->opRead(z, buf, size, err);
+	if (n)
+	    return n;
+
+	const struct ops *ops;
+	int rc = zpkglistBegin(&z->fda, &ops, err);
+	if (rc <= 0)
+	    return rc;
+	if (ops == z->ops)
+	    rc = z->ops->opReopen(z, err);
+	else {
+	    z->ops->opFree(z), z->opState = NULL;
+	    z->ops = ops;
+	    rc = z->ops->opOpen(z, err);
+	}
+	if (rc < 0)
+	    return rc;
+	assert(rc > 0);
+    }
+}
+
+ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
 {
     assert(size > 0);
-    return z->ops->opRead(z, buf, size, err);
+    size_t total = 0;
+    do {
+	ssize_t n = zread1(z, buf, size, err);
+	if (n < 0)
+	    return -1;
+	if (n == 0)
+	    break;
+	size -= n, buf = (char *) buf + n;
+	total += n;
+    } while (size);
+    return total;
+}
+
+ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
+{
+    if (!z->bulkBuf) {
+	z->bulkBuf = malloc(256 << 10);
+	if (!z->bulkBuf)
+	    return ERRNO("malloc"), -1;
+    }
+    ssize_t n = zread1(z, z->bulkBuf, 256 << 10, err);
+    if (n <= 0)
+	return n;
+    *bufp = z->bulkBuf;
+    return n;
 }
 
 ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp, const char *err[2])

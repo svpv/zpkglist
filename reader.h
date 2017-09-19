@@ -96,11 +96,18 @@ extern const struct ops
     ops_zstd,
     ops_xz;
 
+// Read the uncompress byte stream.  Concatenates frames.
+ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
+
+// Generic opBulk implementation, uses someting like zread, fills z->bulkBuf.
+ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]);
+
 struct zpkglistReader {
     struct fda fda;
     char fdabuf[NREADA];
     const struct ops *ops;
     void *opState;
+    void *bulkBuf;
 };
 
 extern struct ops aOps;

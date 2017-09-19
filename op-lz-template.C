@@ -55,4 +55,5 @@ const struct ops OPS = {
     OP(Free),
     OP(Read),
     OP(ContentSize),
+    generic_opBulk,
 };
