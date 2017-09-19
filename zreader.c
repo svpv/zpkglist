@@ -77,7 +77,7 @@ static int zreader_begin(struct zreader *z, const char *err[2])
     // Peek at the dictionary frame.
     if (w[2] != MAGIC4_W_ZPKGLIST_DICT)
 	return ERRSTR("bad dictionary magic"), -1;
-    size_t zsize = le32toh(w[3]) - 4;
+    size_t zsize = le32toh(w[3]);
     if (!zsize || zsize >= (64 << 10))
 	return ERRSTR("bad dictionary zsize"), -1;
     // The input is not empty, there's a dictionary.  Permit the situation

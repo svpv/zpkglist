@@ -33,7 +33,7 @@ no dictionary.  To decode data frames, though, the dictionary must be present.
 ### Data frames
 ```
 magic 0x184D2A57 | compressed size | uncompressed size |  compressed data
-   (4 bytes)     |    (4 bytes)    |     (4 bytes)     | (compressed size bytes)
+   (4 bytes)     |    (4 bytes)    |     (4 bytes)     | (compressed size bytes - 4)
 ```
 Frame data is compressed with LZ4 using the dictionary.
 
