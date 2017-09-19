@@ -60,12 +60,18 @@ ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[
 // Generic opBulk implementation, uses someting like zread, fills z->bulkBuf.
 ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]);
 
+// Generic opRead implemented in terms of opBulk, uses z->readState.
+ssize_t generic_opRead(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
+
 struct zpkglistReader {
     struct fda fda;
     char fdabuf[NREADA];
     const struct ops *ops;
     void *opState;
-    void *bulkBuf;
+    union {
+	void *bulkBuf;
+	void *readState;
+    };
 };
 
 #define CAT_(x, y) x ## y

@@ -203,3 +203,8 @@ void zreader_free(struct zreader *z)
 	free(z->buf - (64 << 10));
     free(z);
 }
+
+unsigned zreader_contentSize(struct zreader *z)
+{
+    return z->contentSize;
+}

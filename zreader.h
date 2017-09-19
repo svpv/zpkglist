@@ -35,4 +35,6 @@ void zreader_free(struct zreader *z);
 ssize_t zreader_getFrame(struct zreader *z, void **bufp, const char *err[2])
 			 __attribute__((nonnull));
 
+unsigned zreader_contentSize(struct zreader *z) __attribute__((nonnull));
+
 #pragma GCC visibility pop
