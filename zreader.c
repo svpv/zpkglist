@@ -22,24 +22,48 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <unistd.h>
 #include <endian.h>
 #include <lz4.h>
-#include "reader.h"
+#include "zreader.h"
 #include "error.h"
-#include "xread.h"
+#include "reada.h"
 #include "header.h"
+#include "magic4.h"
 
-int zInit(struct zReader *z, int fd, char lead[16], const char *err[2])
+struct zreader {
+    struct fda *fda;
+    bool eof;
+    // stats
+    unsigned contentSize;
+    unsigned maxSize;
+    unsigned zmaxSize;
+    // Compressed and decompressed buffers,
+    // maxSize and zmaxSize bytes.
+    char *buf, *zbuf;
+    // Keeps the last 8 bytes of the dictionary which are clobbered
+    // to and fro with the first header's magic.
+    char save[8];
+    // The leading fields of a frame to read.
+    unsigned lead[3];
+};
+
+static int zreader_begin(struct zreader *z, const char *err[2])
 {
     unsigned w[4];
-    memcpy(w, lead, 16);
+    ssize_t ret = reada(z->fda, w, sizeof w);
+    if (ret < 0)
+	return ERRNO("read"), -1;
+    if (ret == 0)
+	return 0;
+    if (ret < 4)
+	return ERRSTR("unexpected EOF"), -1;
+    if (w[0] != MAGIC4_W_ZPKGLIST)
+	return ERRSTR("bad zpkglist magic"), -1;
     if (w[3])
 	return ERRSTR("input too big"), -1;
-    z->fd = fd;
     z->contentSize = le32toh(w[2]);
     // Read the rest of the leading frame + the dictionary frame header.
-    int ret = xread(fd, w, 16);
+    ret = reada(z->fda, w, 16);
     if (ret < 0)
 	return ERRNO("read"), -1;
     // Permit a truncated frame with contentSize but without (maxSize,zmaxSize).
@@ -51,7 +75,7 @@ int zInit(struct zReader *z, int fd, char lead[16], const char *err[2])
     if (ret != 16)
 	return ERRSTR("unexpected EOF"), -1;
     // Peek at the dictionary frame.
-    if (le32toh(w[2]) != 0x184D2A56)
+    if (w[2] != MAGIC4_W_ZPKGLIST_DICT)
 	return ERRSTR("bad dictionary magic"), -1;
     size_t zsize = le32toh(w[3]) - 4;
     if (!zsize || zsize >= (64 << 10))
@@ -74,7 +98,7 @@ int zInit(struct zReader *z, int fd, char lead[16], const char *err[2])
     if (!buf)
 	return ERRNO("malloc"), -1;
     // Read the dictionary data + the first frame's header.
-    ret = xread(fd, buf + (64 << 10), zsize + 12);
+    ret = reada(z->fda, buf + (64 << 10), zsize + 12);
     if (ret < 0)
 	return free(buf), ERRNO("read"), -1;
     // Nothing after the dictionary?
@@ -87,7 +111,7 @@ int zInit(struct zReader *z, int fd, char lead[16], const char *err[2])
 	return free(buf), ERRSTR("unexpected EOF"), -1;
     // Peek at the first frame's header.
     memcpy(z->lead, buf + (64 << 10) + zsize, 12);
-    if (le32toh(z->lead[0]) != 0x184D2A57)
+    if (z->lead[0] != MAGIC4_W_ZPKGLIST_FRAME)
 	return free(buf), ERRSTR("bad data frame magic"), -1;
     // There is some data, it's time to check the sizes.  E.g. if maxSize is 0,
     // the allocated buffer is too small, it's not gonna work.
@@ -110,9 +134,23 @@ int zInit(struct zReader *z, int fd, char lead[16], const char *err[2])
     return 1;
 }
 
-static int zReadBuf(union u *u, void **bufp, const char *err[2])
+int zreader_open(struct zreader **zp, struct fda *fda, const char *err[2])
 {
-    struct zReader *z = &u->z;
+    struct zreader *z = malloc(sizeof *z);
+    if (!z)
+	return ERRNO("malloc"), -1;
+
+    *z = (struct zreader) { fda };
+
+    int rc = zreader_begin(z, err);
+    if (rc <= 0)
+	return free(z), rc;
+    *zp = z;
+    return rc;
+}
+
+ssize_t zreader_getFrame(struct zreader *z, void **bufp, const char *err[2])
+{
     if (z->eof)
 	return 0;
     // The frame has already been peeked upon, validate the sizes.
@@ -123,7 +161,7 @@ static int zReadBuf(union u *u, void **bufp, const char *err[2])
     if (!zsize || zsize > z->zmaxSize || zsize > LZ4_COMPRESSBOUND(size))
 	return ERRSTR("bad data zsize"), -1;
     // Read this frame's data + the next frame's header.
-    int ret = xread(z->fd, z->zbuf, zsize + 12);
+    int ret = reada(z->fda, z->zbuf, zsize + 12);
     if (ret < 0)
 	return ERRNO("read"), -1;
     if (ret == zsize)
@@ -134,7 +172,7 @@ static int zReadBuf(union u *u, void **bufp, const char *err[2])
 	// Save the next frame's header for the next call.
 	memcpy(z->lead, z->zbuf + zsize, 12);
 	// Peek at the next frame's header.
-	if (le32toh(z->lead[0]) != 0x184D2A57)
+	if (z->lead[0] != MAGIC4_W_ZPKGLIST_FRAME)
 	    return ERRSTR("bad data frame magic"), -1;
     }
     // Restore the last bytes of the dictionary.
@@ -157,17 +195,11 @@ static int zReadBuf(union u *u, void **bufp, const char *err[2])
     return size + 8;
 }
 
-static void zClose(union u *u)
+void zreader_free(struct zreader *z)
 {
-    struct zReader *z = &u->z;
-    close(z->fd);
-    if (z->buf) {
+    if (!z)
+	return;
+    if (z->buf)
 	free(z->buf - (64 << 10));
-	z->buf = NULL;
-    }
+    free(z);
 }
-
-struct ops zOps = {
-    .opReadBuf = zReadBuf,
-    .opClose = zClose,
-};

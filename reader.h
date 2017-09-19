@@ -40,30 +40,10 @@ struct aReader {
     size_t bufSize;
 };
 
-// Compressed reader state.
-struct zReader {
-    int fd;
-    bool eof;
-    // stats
-    unsigned contentSize;
-    unsigned maxSize;
-    unsigned zmaxSize;
-    // Compressed and decompressed buffers,
-    // maxSize and zmaxSize bytes.
-    char *buf, *zbuf;
-    // Keeps the last 8 bytes of the dictionary which are clobbered
-    // to and fro with the first header's magic.
-    char save[8];
-    // The leading fields of a frame to read.
-    unsigned lead[3];
-};
-
 int aInit(struct aReader *a, int fd, char lead[16], const char *err[2]);
-int zInit(struct zReader *z, int fd, char lead[16], const char *err[2]);
 
 union u {
     struct aReader a;
-    struct zReader z;
 };
 
 struct zpkglistReader;
@@ -115,6 +95,5 @@ struct zpkglistReader {
 #define CAT3(x, y, z) CAT2(x, CAT2(y, z))
 
 extern struct ops aOps;
-extern struct ops zOps;
 
 #pragma GCC visibility pop
