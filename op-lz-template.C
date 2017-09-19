@@ -1,10 +1,6 @@
 #ifndef OP_LZ_TEMPLATE_C
 #define OP_LZ_TEMPLATE_C
 
-#define CAT_(x, y) x ## y
-#define CAT2(x, y) CAT_(x, y)
-#define CAT3(x, y, z) CAT2(x, CAT2(y, z))
-
 #define OP(op) CAT3(LZ, _op, op)
 #define LZREADER CAT2(LZ, reader)
 #define CALL(method) CAT3(LZREADER, _, method)

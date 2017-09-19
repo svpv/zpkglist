@@ -110,6 +110,10 @@ struct zpkglistReader {
     void *bulkBuf;
 };
 
+#define CAT_(x, y) x ## y
+#define CAT2(x, y) CAT_(x, y)
+#define CAT3(x, y, z) CAT2(x, CAT2(y, z))
+
 extern struct ops aOps;
 extern struct ops zOps;
 
