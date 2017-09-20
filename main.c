@@ -56,8 +56,8 @@ int main(int argc, char **argv)
 	ret = zpkglistFdopen(0, &z, err);
 	if (ret > 0) {
 	    void *buf;
-	    func = "zpkglistReadBuf";
-	    while ((ret = zpkglistReadBuf(z, &buf, err)) > 0)
+	    func = "zpkglistBulk";
+	    while ((ret = zpkglistBulk(z, &buf, err)) > 0)
 		if (!xwrite(1, buf, ret)) {
 		    func = "main";
 		    ERRNO("write");
