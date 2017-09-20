@@ -25,7 +25,7 @@
 #include <fcntl.h>
 #include "zpkglist.h"
 #include "error.h"
-#include "xread.h"
+#include "xwrite.h"
 
 #define PROG "zpkglist"
 

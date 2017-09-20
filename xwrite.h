@@ -18,16 +18,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Reliable reads and writes which handle EINTR.
-
 #include <stdbool.h>
-
-#pragma GCC visibility push(hidden)
-
-// Reads up to size bytes.
-int xread(int fd, void *buf, size_t size);
+#include <assert.h>
+#include <unistd.h>
+#include <errno.h>
 
 // Writes exactly size bytes.
-bool xwrite(int fd, const void *buf, size_t size);
+static bool xwrite(int fd, const void *buf, size_t size)
+{
+    assert(size);
+    bool zero = false;
+    do {
+	ssize_t ret = write(fd, buf, size);
+	if (ret < 0) {
+	    if (errno == EINTR)
+		continue;
+	    return false;
+	}
+	if (ret == 0) {
+	    if (zero) {
+		// write keeps returning zero
+		errno = EAGAIN;
+		return false;
+	    }
+	    zero = true;
+	    continue;
+	}
+	zero = false;
+	assert(ret <= size);
+	buf = (char *) buf + ret;
+	size -= ret;
+    } while (size);
 
-#pragma GCC visibility pop
+    return true;
+}

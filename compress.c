@@ -29,7 +29,7 @@
 #include <lz4.h>
 #include "zpkglist.h"
 #include "error.h"
-#include "xread.h"
+#include "xwrite.h"
 #include "reader.h" // zread
 #include "header.h"
 
