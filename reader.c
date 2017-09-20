@@ -80,13 +80,21 @@ int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
     return 1;
 }
 
-void zpkglistClose(struct zpkglistReader *z)
+void zpkglistFree(struct zpkglistReader *z)
 {
-    assert(z);
+    if (!z)
+	return;
     z->ops->opFree(z);
     free(z->bulkBuf);
-    close(z->fda.fd);
     free(z);
+}
+
+void zpkglistClose(struct zpkglistReader *z)
+{
+    if (!z)
+	return;
+    close(z->fda.fd);
+    zpkglistFree(z);
 }
 
 static ssize_t zread1(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])

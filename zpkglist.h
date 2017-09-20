@@ -46,6 +46,9 @@ struct zpkglistReader;
 // On success, the Reader handle is returned via zp.
 int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
 		   __attribute__((nonnull));
+// Free without closing.
+void zpkglistFree(struct zpkglistReader *z);
+// Combines free + close.
 void zpkglistClose(struct zpkglistReader *z);
 
 // Bulk reading of uncompressed data into the internal buffer,
