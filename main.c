@@ -53,7 +53,7 @@ int main(int argc, char **argv)
     else {
 	struct zpkglistReader *z;
 	func = "zpkglistFdopen";
-	ret = zpkglistFdopen(0, &z, err);
+	ret = zpkglistFdopen(&z, 0, err);
 	if (ret > 0) {
 	    void *buf;
 	    func = "zpkglistBulk";

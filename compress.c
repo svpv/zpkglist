@@ -249,7 +249,7 @@ int zpkglistCompress(int in, int out, const char *err[2],
 
     // Open input.
     struct zpkglistReader *zin;
-    int rc = zpkglistFdopen(in, &zin, err);
+    int rc = zpkglistFdopen(&zin, in, err);
     if (rc <= 0)
 	return rc;
 

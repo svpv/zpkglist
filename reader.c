@@ -59,7 +59,7 @@ static int zpkglistBegin(struct fda *fda, const struct ops **opsp, const char *e
     return 1;
 }
 
-int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
+int zpkglistFdopen(struct zpkglistReader **zp, int fd, const char *err[2])
 {
     struct zpkglistReader *z = malloc(sizeof *z);
     if (!z)

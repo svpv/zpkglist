@@ -45,7 +45,7 @@ struct zpkglistReader;
 // Returns 1 on success, 0 on EOF at the beginning of input
 // (no headers, the Reader handle is not created), -1 on error.
 // On success, the Reader handle is returned via zp.
-int zpkglistFdopen(int fd, struct zpkglistReader **zp, const char *err[2])
+int zpkglistFdopen(struct zpkglistReader **zp, int fd, const char *err[2])
 		   __attribute__((nonnull));
 // Free without closing.
 void zpkglistFree(struct zpkglistReader *z);
