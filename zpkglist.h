@@ -30,6 +30,7 @@ extern "C" {
 // Compress a list of rpm headers, such as produced by genpkglist,
 // into zpkglist file format (see README.md).  Returns 1 on success,
 // 0 on empty input (with valid output still written), -1 on error.
+// File descriptors and remain open.
 // Information about an error is returned via the err[2] parameter:
 // the first string is typically a function name, and the second is
 // a string which describes the error.  Both strings normally come

@@ -30,6 +30,7 @@
 #include "zpkglist.h"
 #include "error.h"
 #include "xread.h"
+#include "reader.h" // zread
 #include "header.h"
 
 struct Z {
@@ -120,17 +121,16 @@ struct stats {
     unsigned zmaxSize;
 };
 
-static bool zLoop(struct Z *z, struct stats *stats, int in, int out, const char *err[2],
+static bool zLoop(struct Z *z, struct stats *stats,
+		  struct zpkglistReader *zin, int out, const char *err[2],
 		  void (*hash)(void *buf, unsigned size, void *arg), void *arg)
 {
     // Load the leading bytes of the first header.
     char lead[16];
-    int ret = xread(in, lead, 16);
+    int ret = zread(zin, lead, 16, err);
     // If it's EOF or an error, do nothing.
-    if (ret < 0)
-	return ERRNO("read"), false;
-    if (ret == 0)
-	return true;
+    if (ret <= 0)
+	return ret == 0;
     if (ret < 16)
 	return ERRSTR("unexpected EOF"), false;
     if (!headerCheckMagic(lead))
@@ -167,9 +167,9 @@ static bool zLoop(struct Z *z, struct stats *stats, int in, int out, const char 
 		cur += 16;
 	    }
 	    // Read this header's data + the next header's leading bytes.
-	    ret = xread(in, cur, dataSize + 16);
+	    ret = zread(zin, cur, dataSize + 16, err);
 	    if (ret < 0)
-		return ERRNO("read"), false;
+		return false;
 	    cur += dataSize;
 	    if (ret == dataSize) {
 		eof = true;
@@ -247,16 +247,26 @@ int zpkglistCompress(int in, int out, const char *err[2],
     if (!xwrite(out, frame, sizeof frame))
 	return ERRNO("write"), -1;
 
+    // Open input.
+    struct zpkglistReader *zin;
+    int rc = zpkglistFdopen(in, &zin, err);
+    if (rc <= 0)
+	return rc;
+
     // Compress.
     struct Z *z = zNew(err);
-    if (!z)
+    if (!z) {
+	zpkglistFree(zin);
 	return -1;
+    }
     struct stats stats = { 0, 0, 0 };
-    if (!zLoop(z, &stats, in, out, err, hash, arg)) {
+    if (!zLoop(z, &stats, zin, out, err, hash, arg)) {
 	zFree(z);
+	zpkglistFree(zin);
 	return -1;
     }
     zFree(z);
+    zpkglistFree(zin);
 
     // Empty input?
     if (stats.total == 0)
