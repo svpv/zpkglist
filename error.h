@@ -18,16 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <stdio.h> // sys_errlist
 #include <errno.h>
 
-#pragma GCC visibility push(hidden)
-
 // A thread-safe strerror(3) replacement.
-const char *xstrerror(int errnum);
+static inline const char *xstrerror(int errnum)
+{
+    // Some of the great minds say that sys_errlist is deprecated.
+    // Well, at least it's thread-safe, and it does not deadlock.
+    if (errnum > 0 && errnum < sys_nerr)
+	return sys_errlist[errnum];
+    return "Unknown error";
+}
 
 // Helpers to fill err[2] arg.
 #define ERRNO(func) err[0] = func, err[1] = xstrerror(errno)
 #define ERRSTR(str) err[0] = __func__, err[1] = str
 #define ERROR(func, str) err[0] = func, err[1] = str
-
-#pragma GCC visibility pop
