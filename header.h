@@ -22,17 +22,29 @@
 
 #include <stdbool.h>
 #include <string.h>
-
-#pragma GCC visibility push(hidden)
+#include <arpa/inet.h>
 
 // Maximum bytes in a header permitted by rpm, without magic.
 #define headerMaxSize (32 << 20)
 
 // A header starts with magic (8 bytes) + (il,dl) sizes (8 bytes).
-extern const unsigned char headerMagic[8];
+static const unsigned char headerMagic[8] = {
+    0x8e, 0xad, 0xe8, 0x01, 0x00, 0x00, 0x00, 0x00
+};
+
 #define headerCheckMagic(lead) (memcmp(lead, headerMagic, 8) == 0)
 
 // Returns the size of header's data after (il,dl).
-int headerDataSize(char lead[16]);
-
-#pragma GCC visibility pop
+static inline int headerDataSize(char lead[16])
+{
+    unsigned *ei = (unsigned *) (lead + 8);
+    unsigned il = ntohl(ei[0]);
+    unsigned dl = ntohl(ei[1]);
+    // Check for overflows.
+    if (il > headerMaxSize / 16 || dl > headerMaxSize)
+	return -1;
+    size_t dataSize = 16 * il + dl;
+    if (dataSize == 0 || 8 + dataSize > headerMaxSize)
+	return -1;
+    return dataSize;
+}
