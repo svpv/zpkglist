@@ -1,0 +1,14 @@
+AC_INIT([zpkglist], [0.1])
+AC_CONFIG_SRCDIR([zpkglist.h])
+
+AM_INIT_AUTOMAKE([foreign])
+AM_PROG_LIBTOOL
+AC_PROG_CC_C99
+AC_SYS_LARGEFILE
+
+PKG_CHECK_MODULES([LZ4], [liblz4 >= 1.7.3])
+PKG_CHECK_MODULES([ZSTD], [libzstd >= 1.3.0])
+PKG_CHECK_MODULES([LZMA], [liblzma >= 5.0])
+
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
