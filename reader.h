@@ -58,9 +58,6 @@ ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[
 // Generic opBulk implementation, uses someting like zread, fills z->bulkBuf.
 ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]);
 
-// Generic opRead implemented in terms of opBulk, uses z->readState.
-ssize_t generic_opRead(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
-
 // Generic implementation in terms of zread, without file position.
 ssize_t generic_opNextMalloc(struct zpkglistReader *z,
 	void **bufp, bool needMagic, const char *err[2]);

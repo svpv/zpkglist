@@ -32,8 +32,8 @@ int zreader_open(struct zreader **zp, struct fda *fda, const char *err[2])
 void zreader_free(struct zreader *z);
 
 // Get the frame with up to 4 header blobs (starts with the magic).
-ssize_t zreader_getFrame(struct zreader *z, void **bufp, const char *err[2])
-			 __attribute__((nonnull));
+ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp, const char *err[2])
+			 __attribute__((nonnull(1,2,4)));
 
 unsigned zreader_contentSize(struct zreader *z) __attribute__((nonnull));
 

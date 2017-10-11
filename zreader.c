@@ -149,7 +149,7 @@ int zreader_open(struct zreader **zp, struct fda *fda, const char *err[2])
     return rc;
 }
 
-ssize_t zreader_getFrame(struct zreader *z, void **bufp, const char *err[2])
+ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp, const char *err[2])
 {
     if (z->eof)
 	return 0;
@@ -161,6 +161,7 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, const char *err[2])
     if (!zsize || zsize > z->zmaxSize || zsize > LZ4_COMPRESSBOUND(size))
 	return ERRSTR("bad data zsize"), -1;
     // Read this frame's data + the next frame's header.
+    off_t pos = tella(z->fda) - 12;
     int ret = reada(z->fda, z->zbuf, zsize + 12);
     if (ret < 0)
 	return ERRNO("read"), -1;
@@ -192,6 +193,8 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, const char *err[2])
     // Prepend the missing magic.
     memcpy(z->buf - 8, headerMagic, 8);
     *bufp = z->buf - 8;
+    if (posp)
+	*posp = pos;
     return size + 8;
 }
 
