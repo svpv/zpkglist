@@ -23,28 +23,60 @@
 #include <assert.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <getopt.h>
+#include <rpm/rpmlib.h>
 #include "zpkglist.h"
 #include "error.h"
 #include "xwrite.h"
 
 #define PROG "zpkglist"
 
+enum {
+    OPT_QF = 256,
+};
+
+static const struct option longopts[] = {
+    { "qf", required_argument, NULL, OPT_QF },
+    { "help", no_argument, NULL, 'h' },
+    { NULL },
+};
+
 int main(int argc, char **argv)
 {
-    posix_fadvise(0, 0, 0, POSIX_FADV_SEQUENTIAL);
-    assert(!isatty(0));
-    assert(!isatty(1));
-    argc--, argv++;
+    int c;
+    bool usage = false;
     bool decode = false;
-    if (argc > 0 && strcmp(argv[0], "-d") == 0) {
-	argc--, argv++;
-	decode = true;
+    const char *qf = NULL;
+    while ((c = getopt_long(argc, argv, "dh", longopts, NULL)) != -1) {
+	switch (c) {
+	case 0:
+	    break;
+	case 'd':
+	    decode = true;
+	    break;
+	case OPT_QF:
+	    qf = optarg;
+	    break;
+	default:
+	    usage = 1;
+	}
     }
-    assert(argc == 0);
+    if (argc > optind && !usage) {
+	fprintf(stderr, PROG ": too many arguments\n");
+	usage = 1;
+    }
+    if (usage) {
+	fprintf(stderr, "Usage: " PROG "[-d] [--qf=FMT] <pkglist\n");
+	return 1;
+    }
+    assert(!isatty(0));
+    posix_fadvise(0, 0, 0, POSIX_FADV_SEQUENTIAL);
+    if (!qf)
+	assert(!isatty(1));
     const char *func;
     const char *err[2];
     int ret;
-    if (!decode) {
+    if (!decode && !qf) {
 	func = "zpkglistCompress";
 	ret = zpkglistCompress(0, 1, err, NULL, NULL);
 	if (ret == 0)
@@ -55,15 +87,39 @@ int main(int argc, char **argv)
 	func = "zpkglistFdopen";
 	ret = zpkglistFdopen(&z, 0, err);
 	if (ret > 0) {
-	    void *buf;
-	    func = "zpkglistBulk";
-	    while ((ret = zpkglistBulk(z, &buf, err)) > 0)
-		if (!xwrite(1, buf, ret)) {
-		    func = "main";
-		    ERRNO("write");
-		    ret = -1;
-		    break;
+	    if (qf) {
+		void *blob;
+		func = "zpkglistNextMalloc";
+		while ((ret = zpkglistNextMalloc(z, &blob, NULL, false, err)) > 0) {
+		    Header h = headerImport(blob, ret, 0);
+		    if (h == NULL) {
+			func = err[0] = "headerImport",
+			err[1] = "headerImport failed";
+			ret = -1;
+			break;
+		    }
+		    char *s = headerFormat(h, qf, &err[1]);
+		    if (!s) {
+			func = err[0] = "headerFormat";
+			ret = -1;
+			break;
+		    }
+		    fputs(s, stdout);
+		    free(s);
+		    headerFree(h);
 		}
+	    }
+	    else {
+		void *buf;
+		func = "zpkglistBulk";
+		while ((ret = zpkglistBulk(z, &buf, err)) > 0)
+		    if (!xwrite(1, buf, ret)) {
+			func = "main";
+			ERRNO("write");
+			ret = -1;
+			break;
+		    }
+	    }
 	    zpkglistClose(z);
 	}
     }
@@ -72,10 +128,6 @@ int main(int argc, char **argv)
 	    fprintf(stderr, "%s: %s\n", err[0], err[1]);
 	else
 	    fprintf(stderr, "%s: %s: %s\n", func, err[0], err[1]);
-	if (decode)
-	    fprintf(stderr, PROG ": decompression failed\n");
-	else
-	    fprintf(stderr, PROG ": compression failed\n");
 	return 1;
     }
     return 0;

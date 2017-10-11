@@ -61,6 +61,12 @@ void zpkglistClose(struct zpkglistReader *z);
 ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp,
 		     const char *err[2]) __attribute__((nonnull));
 
+#include <stdint.h>
+
+ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **bufp,
+	int64_t *posp, bool needMagic, const char *err[2])
+	__attribute__((nonnull(1,2,5)));
+
 #ifdef __cplusplus
 }
 #endif

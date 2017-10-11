@@ -37,14 +37,12 @@ struct ops {
     int64_t (*opContentSize)(struct zpkglistReader *z);
     // Bulk reading, internal buffer.
     ssize_t (*opBulk)(struct zpkglistReader *z, void **bufp, const char *err[2]);
-    // Header reading.
-    ssize_t (*opHdrSize)(struct zpkglistReader *z, const char *err[2]);
-    bool (*opHdrRead)(struct zpkglistReader *z, void *buf, const char *err[2]);
+    // Header reading, malloc a buffer.
+    ssize_t (*opNextMalloc)(struct zpkglistReader *z, void **buf, int64_t *posp, bool needMagic, const char *err[2]);
     // Header reading, internal buffer.
-    ssize_t (*opHdrReadP)(struct zpkglistReader *z, void **bufp, const char *err[2]);
-    // Header position (before read), 0 = EOF or error or not supported.
-    unsigned (*opTell)(struct zpkglistReader *z);
-    bool (*opSeek)(struct zpkglistReader *z, unsigned pos, const char *err[2]);
+    ssize_t (*opNextView)(struct zpkglistReader *z, void **buf, int64_t *posp, bool needMagic, const char *err[2]);
+    // Seek to a position previously returned via posp.
+    bool (*opSeek)(struct zpkglistReader *z, int64_t pos, const char *err[2]);
 };
 
 extern const struct ops
@@ -63,6 +61,10 @@ ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]
 // Generic opRead implemented in terms of opBulk, uses z->readState.
 ssize_t generic_opRead(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
 
+// Generic implementation in terms of zread, without file position.
+ssize_t generic_opNextMalloc(struct zpkglistReader *z,
+	void **bufp, bool needMagic, const char *err[2]);
+
 struct zpkglistReader {
     struct fda fda;
     char fdabuf[NREADA];
@@ -72,6 +74,10 @@ struct zpkglistReader {
 	void *bulkBuf;
 	void *readState;
     };
+    // Reading headers.
+    char lead[16];
+    bool hasLead;
+    bool eof;
 };
 
 #define CAT_(x, y) x ## y

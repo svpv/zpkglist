@@ -75,6 +75,8 @@ int zpkglistFdopen(struct zpkglistReader **zp, int fd, const char *err[2])
 	return free(z), -1;
 
     z->bulkBuf = NULL;
+    z->hasLead = false;
+    z->eof = false;
 
     *zp = z;
     return 1;
@@ -154,4 +156,10 @@ ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]
 ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
 {
     return z->ops->opBulk(z, bufp, err);
+}
+
+ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **bufp,
+	int64_t *posp, bool needMagic, const char *err[2])
+{
+    return z->ops->opNextMalloc(z, bufp, posp, needMagic, err);
 }

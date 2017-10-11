@@ -9,6 +9,7 @@ AC_SYS_LARGEFILE
 PKG_CHECK_MODULES([LZ4], [liblz4 >= 1.7.3])
 PKG_CHECK_MODULES([ZSTD], [libzstd >= 1.3.0])
 PKG_CHECK_MODULES([LZMA], [liblzma >= 5.0])
+PKG_CHECK_MODULES([RPM], [rpm >= 4.10])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

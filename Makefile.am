@@ -16,4 +16,5 @@ include_HEADERS = zpkglist.h
 
 bin_PROGRAMS = zpkglist
 zpkglist_SOURCES = main.c
-zpkglist_LDADD = libzpkglist.la
+main.lo: CFLAGS += @RPM_CFLAGS@
+zpkglist_LDADD = libzpkglist.la @RPM_LIBS@
