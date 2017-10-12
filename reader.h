@@ -61,6 +61,8 @@ ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]
 // Generic implementation in terms of zread, without file position.
 ssize_t generic_opNextMalloc(struct zpkglistReader *z,
 	void **bufp, bool needMagic, const char *err[2]);
+ssize_t generic_opNextView(struct zpkglistReader *z,
+	void **bufp, bool needMagic, const char *err[2]);
 
 struct zpkglistReader {
     struct fda fda;
@@ -75,6 +77,9 @@ struct zpkglistReader {
     char lead[16];
     bool hasLead;
     bool eof;
+    char hdrSmallBuf[8192];
+    void *hdrBuf;
+    size_t hdrBufSize;
 };
 
 #define CAT_(x, y) x ## y

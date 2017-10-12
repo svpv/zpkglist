@@ -38,6 +38,16 @@ static ssize_t OP(NextMalloc)(struct zpkglistReader *z,
     return ret;
 }
 
+static ssize_t OP(NextView)(struct zpkglistReader *z,
+	void **bufp, int64_t *posp, bool needMagic, const char *err[2])
+{
+    off_t pos = tella(&z->fda) - 16 * z->hasLead;
+    ssize_t ret = generic_opNextView(z, bufp, needMagic, err);
+    if (ret > 0 && posp)
+	*posp = pos;
+    return ret;
+}
+
 const struct ops OPS = {
     OP(Open),
     OP(Reopen),
@@ -46,4 +56,5 @@ const struct ops OPS = {
     OP(ContentSize),
     generic_opBulk,
     OP(NextMalloc),
+    OP(NextView),
 };

@@ -63,7 +63,13 @@ ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp,
 
 #include <stdint.h>
 
+// Read the next header blob, malloc a buffer.
 ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **bufp,
+	int64_t *posp, bool needMagic, const char *err[2])
+	__attribute__((nonnull(1,2,5)));
+
+// Read the next header blob into an internal buffer.
+ssize_t zpkglistNextView(struct zpkglistReader *z, void **bufp,
 	int64_t *posp, bool needMagic, const char *err[2])
 	__attribute__((nonnull(1,2,5)));
 

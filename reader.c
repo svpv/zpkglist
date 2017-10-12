@@ -77,6 +77,8 @@ int zpkglistFdopen(struct zpkglistReader **zp, int fd, const char *err[2])
     z->bulkBuf = NULL;
     z->hasLead = false;
     z->eof = false;
+    z->hdrBuf = NULL;
+    z->hdrBufSize = 0;
 
     *zp = z;
     return 1;
@@ -88,6 +90,7 @@ void zpkglistFree(struct zpkglistReader *z)
 	return;
     z->ops->opFree(z);
     free(z->bulkBuf);
+    free(z->hdrBuf);
     free(z);
 }
 
@@ -162,4 +165,10 @@ ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **bufp,
 	int64_t *posp, bool needMagic, const char *err[2])
 {
     return z->ops->opNextMalloc(z, bufp, posp, needMagic, err);
+}
+
+ssize_t zpkglistNextView(struct zpkglistReader *z, void **bufp,
+	int64_t *posp, bool needMagic, const char *err[2])
+{
+    return z->ops->opNextView(z, bufp, posp, needMagic, err);
 }

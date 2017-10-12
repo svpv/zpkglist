@@ -68,11 +68,52 @@ ssize_t generic_opNextMalloc(struct zpkglistReader *z,
     return 8 * needMagic + 8 + dataSize;
 }
 
+ssize_t generic_opNextView(struct zpkglistReader *z,
+	void **bufp, bool needMagic, const char *err[2])
+{
+    ssize_t dataSize = generic_opNextSize(z, err);
+    if (dataSize <= 0)
+	return dataSize;
+    char *p;
+    size_t needBytes = 8 * needMagic + 8 + dataSize + 16;
+    if (needBytes <= sizeof z->hdrSmallBuf)
+	p = z->hdrSmallBuf,
+	free(z->hdrBuf), z->hdrBuf = NULL, z->hdrBufSize = 0;
+    else if (needBytes <= z->hdrBufSize)
+	p = z->hdrBuf;
+    else {
+	free(z->hdrBuf);
+	p = z->hdrBuf = malloc(needBytes);
+	if (!p) {
+	    z->hdrBufSize = 0;
+	    return ERRNO("malloc"), -1;
+	}
+	z->hdrBufSize = needBytes;
+    }
+    if (needMagic)
+	memcpy(p, z->lead, 16);
+    else
+	memcpy(p, z->lead + 8, 8);
+    if (!generic_opNextRead(z, p + 8 * needMagic + 8, dataSize, err))
+	return -1;
+    *bufp = p;
+    return 8 * needMagic + 8 + dataSize;
+}
+
 static ssize_t lz_opNextMalloc(struct zpkglistReader *z,
 	void **bufp, int64_t *posp, bool needMagic, const char *err[2])
 {
     ssize_t ret = generic_opNextMalloc(z, bufp, needMagic, err);
     // File position not supported.  Cannot get back, at least.
+    if (ret > 0 && posp)
+	*posp = -1;
+    return ret;
+}
+
+static ssize_t lz_opNextView(struct zpkglistReader *z,
+	void **bufp, int64_t *posp, bool needMagic, const char *err[2])
+{
+    ssize_t ret = generic_opNextView(z, bufp, needMagic, err);
     if (ret > 0 && posp)
 	*posp = -1;
     return ret;
