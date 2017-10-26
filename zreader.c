@@ -192,6 +192,9 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp, const char
 	return ERROR("LZ4_decompress_fast_usingDict", "decompression failed"), -1;
     // Prepend the missing magic.
     memcpy(z->buf - 8, headerMagic, 8);
+    // Append the trailing magic (not on behalf of the frame size).
+    // This may clobber z->zbuf, which should not be a problem by now.
+    memcpy(z->buf + size, headerMagic, 8);
     *bufp = z->buf - 8;
     if (posp)
 	*posp = pos;
