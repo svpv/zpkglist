@@ -161,14 +161,29 @@ ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
     return z->ops->opBulk(z, bufp, err);
 }
 
-ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **bufp,
-	int64_t *posp, bool needMagic, const char *err[2])
+ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **blobp,
+	int64_t *posp, const char *err[2])
 {
-    return z->ops->opNextMalloc(z, bufp, posp, needMagic, err);
+    ssize_t ret = z->ops->opNextMalloc(z, posp, err);
+    if (ret > 0)
+	*blobp = z->hdrBuf, z->hdrBuf = NULL;
+    return ret;
 }
 
-ssize_t zpkglistNextView(struct zpkglistReader *z, void **bufp,
-	int64_t *posp, bool needMagic, const char *err[2])
+ssize_t zpkglistNextMallocP(struct zpkglistReader *z, void ***blobpp,
+	int64_t *posp, const char *err[2])
 {
-    return z->ops->opNextView(z, bufp, posp, needMagic, err);
+    ssize_t ret = z->ops->opNextMalloc(z, posp, err);
+    if (ret > 0)
+	*blobpp = &z->hdrBuf;
+    return ret;
+}
+
+ssize_t zpkglistNextView(struct zpkglistReader *z, void **blobp,
+	int64_t *posp, const char *err[2])
+{
+    ssize_t ret = z->ops->opNextMalloc(z, posp, err);
+    if (ret > 0)
+	*blobp = z->hdrBuf;
+    return ret;
 }

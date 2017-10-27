@@ -64,14 +64,19 @@ ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp,
 #include <stdint.h>
 
 // Read the next header blob, malloc a buffer.
-ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **bufp,
-	int64_t *posp, bool needMagic, const char *err[2])
-	__attribute__((nonnull(1,2,5)));
+ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **blobp,
+	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
+
+// Like NextMalloc except that adds another level of indirection and
+// returns the address of the internal pointer to the malloc'd chunk
+// with the blob.  To take ownership of the chunk, one must nullify
+// the pointer.  Otherwise, the chunk will be reused in the next call.
+ssize_t zpkglistNextMallocP(struct zpkglistReader *z, void ***blobpp,
+	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
 // Read the next header blob into an internal buffer.
-ssize_t zpkglistNextView(struct zpkglistReader *z, void **bufp,
-	int64_t *posp, bool needMagic, const char *err[2])
-	__attribute__((nonnull(1,2,5)));
+ssize_t zpkglistNextView(struct zpkglistReader *z, void **blobp,
+	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
 #ifdef __cplusplus
 }

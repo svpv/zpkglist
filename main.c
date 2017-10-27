@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 	    if (qf) {
 		void *blob;
 		func = "zpkglistNextMalloc";
-		while ((ret = zpkglistNextMalloc(z, &blob, NULL, false, err)) > 0) {
+		while ((ret = zpkglistNextMalloc(z, &blob, NULL, err)) > 0) {
 		    Header h = headerImport(blob, ret, 0);
 		    if (h == NULL) {
 			func = err[0] = "headerImport",
