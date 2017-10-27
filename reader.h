@@ -59,6 +59,9 @@ ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]
 // Generic implementation in terms of zread, without file position.
 ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2]);
 
+// Reallocate z->hdrBuf for opNextMalloc.
+void *generic_opHdrBuf(struct zpkglistReader *z, size_t size);
+
 struct zpkglistReader {
     struct fda fda;
     char fdabuf[NREADA];
@@ -72,7 +75,6 @@ struct zpkglistReader {
     char lead[16];
     bool hasLead;
     bool eof;
-    char hdrSmallBuf[8192];
     void *hdrBuf;
     size_t hdrBufSize;
 };

@@ -41,79 +41,74 @@ static bool generic_opNextRead(struct zpkglistReader *z,
 	memcpy(z->lead, buf + dataSize, 16);
 	if (!headerCheckMagic(z->lead))
 	    return ERRSTR("bad header magic"), false;
+#ifdef __SSE2__
+	memset(buf + dataSize + 16, 0, 16);
+#endif
     }
-    else if (ret == dataSize)
+    else if (ret == dataSize) {
 	z->eof = true;
+	memcpy(buf + dataSize, headerMagic, 8);
+#ifdef __SSE2__
+	memset(buf + dataSize + 8, 0, 24);
+#endif
+    }
     else
 	return ERRSTR("unexpected EOF"), false;
     return true;
 }
 
-ssize_t generic_opNextMalloc(struct zpkglistReader *z,
-	void **bufp, bool needMagic, const char *err[2])
+// Reallocate z->hdrBuf for opNextMalloc.
+void *generic_opHdrBuf(struct zpkglistReader *z, size_t size)
+{
+    // For the first time, allocate the exact size.
+    // Roudning up only helps with reallocs.
+    if (!z->hdrBuf) {
+	z->hdrBufSize = size;
+	return z->hdrBuf = malloc(z->hdrBufSize = size);
+    }
+    // We have the buffer, so this is the second-time logic.
+    // Adjacent header blobs differ in size only by a few hundred bytes,
+    // on average.  A modest bump of the size reduces the number of malloc
+    // calls by a factor of 1.5.
+    if (z->hdrBufSize < size) {
+	free(z->hdrBuf);
+	size = (size + 1536) & ~1023;
+	return z->hdrBuf = malloc(z->hdrBufSize = size);
+    }
+    // If the buffer's somewhat big, maybe try to switch to a smaller one.
+    // For bloated headers with changelogs, we have the following quantiles:
+    // 75% - 7K, 90% - 16K, 95% - 26K, 99% - 79K.
+    size = (size + 16384) & ~1023;
+    if (z->hdrBufSize > (80<<10) && z->hdrBufSize > 2 * size) {
+	free(z->hdrBuf);
+	return z->hdrBuf = malloc(z->hdrBufSize = size);
+    }
+    // The existing buffer is okay.
+    return z->hdrBuf;
+}
+
+ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2])
 {
     ssize_t dataSize = generic_opNextSize(z, err);
     if (dataSize <= 0)
 	return dataSize;
-    char *p = malloc(8 * needMagic + 8 + dataSize + 16);
+    size_t allocSize = 8 + dataSize + 16;
+#ifdef __SSE2__
+    allocSize += 16;
+#endif
+    char *p = generic_opHdrBuf(z, allocSize);
     if (!p)
 	return ERRNO("malloc"), -1;
-    if (needMagic)
-	memcpy(p, z->lead, 16);
-    else
-	memcpy(p, z->lead + 8, 8);
-    if (!generic_opNextRead(z, p + 8 * needMagic + 8, dataSize, err))
-	return free(p), -1;
-    *bufp = p;
-    return 8 * needMagic + 8 + dataSize;
-}
-
-ssize_t generic_opNextView(struct zpkglistReader *z,
-	void **bufp, bool needMagic, const char *err[2])
-{
-    ssize_t dataSize = generic_opNextSize(z, err);
-    if (dataSize <= 0)
-	return dataSize;
-    char *p;
-    size_t needBytes = 8 * needMagic + 8 + dataSize + 16;
-    if (needBytes <= sizeof z->hdrSmallBuf)
-	p = z->hdrSmallBuf,
-	free(z->hdrBuf), z->hdrBuf = NULL, z->hdrBufSize = 0;
-    else if (needBytes <= z->hdrBufSize)
-	p = z->hdrBuf;
-    else {
-	free(z->hdrBuf);
-	p = z->hdrBuf = malloc(needBytes);
-	if (!p) {
-	    z->hdrBufSize = 0;
-	    return ERRNO("malloc"), -1;
-	}
-	z->hdrBufSize = needBytes;
-    }
-    if (needMagic)
-	memcpy(p, z->lead, 16);
-    else
-	memcpy(p, z->lead + 8, 8);
-    if (!generic_opNextRead(z, p + 8 * needMagic + 8, dataSize, err))
+    memcpy(p, z->lead + 8, 8);
+    if (!generic_opNextRead(z, p + 8, dataSize, err))
 	return -1;
-    *bufp = p;
-    return 8 * needMagic + 8 + dataSize;
+    return 8 + dataSize;
 }
 
-static ssize_t lz_opNextMalloc(struct zpkglistReader *z,
-	void **bufp, int64_t *posp, bool needMagic, const char *err[2])
+static ssize_t lz_opNextMalloc(struct zpkglistReader *z, int64_t *posp, const char *err[2])
 {
-    ssize_t ret = generic_opNextMalloc(z, bufp, needMagic, err);
+    ssize_t ret = generic_opNextMalloc(z, err);
     // File position not supported.  Cannot get back, at least.
-    if (ret > 0 && posp)
-	*posp = -1;
-    return ret;
-}
-
-static ssize_t lz_opNextView(struct zpkglistReader *z,
-	void **bufp, int64_t *posp, bool needMagic, const char *err[2])
-{
-    ssize_t ret = generic_opNextView(z, bufp, needMagic, err);
     if (ret > 0 && posp)
 	*posp = -1;
     return ret;
