@@ -86,7 +86,7 @@ static int64_t OP(ContentSize)(struct zpkglistReader *z)
 }
 
 static ssize_t OP(NextView)(struct zpkglistReader *z,
-	void **bufp, int64_t *posp, bool needMagic, const char *err[2])
+	void **bufp, int64_t *posp, const char *err[2])
 {
     if (!z->readState) {
 	z->readState = malloc(sizeof(union readState));
@@ -122,22 +122,24 @@ static ssize_t OP(NextView)(struct zpkglistReader *z,
     if (posp)
 	*posp = ((int64_t) s->pos << 2) + s->ix;
     s->ix++;
-    *bufp = blob + 8 - 8 * needMagic;
-    return 8 * needMagic + 8 + dataSize;
+    *bufp = blob + 8;
+    return 8 + dataSize;
 }
 
-static ssize_t OP(NextMalloc)(struct zpkglistReader *z,
-	void **bufp, int64_t *posp, bool needMagic, const char *err[2])
+static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const char *err[2])
 {
     void *view;
-    ssize_t ret = OP(NextView)(z, &view, posp, needMagic, err);
+    ssize_t ret = OP(NextView)(z, &view, posp, err);
     if (ret <= 0)
 	return ret;
-    char *p = malloc(ret);
+    size_t allocSize = 8 + ret + 8;
+#ifdef __SSE2__
+    allocSize += 24;
+#endif
+    char *p = generic_opHdrBuf(z, allocSize);
     if (!p)
 	return ERRNO("malloc"), -1;
-    memcpy(p, view, ret);
-    *bufp = p;
+    memcpy(p, view, allocSize);
     return ret;
 }
 
@@ -149,5 +151,4 @@ const struct ops OPS = {
     OP(ContentSize),
     OP(Bulk),
     OP(NextMalloc),
-    OP(NextView),
 };
