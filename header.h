@@ -22,10 +22,26 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include <sys/types.h>
 #include <arpa/inet.h>
 
-// Maximum bytes in a header permitted by rpm, without magic.
-#define headerMaxSize (32 << 20)
+// These limits are forced by rpm 4.0 through 4.13.  When they are exceeded,
+// rpm won't load the header.  The limits were relaxed in 4.14, the main reason
+// being that "file signatures may require a lot of space in the header".
+// Since headers in package lists are stripped, and typically do not include
+// file signatures, and since we intend package lists to be usable with all
+// versions of rpm, we stick to the older limits.
+// Limits specified in rpm are actually off by one - e.g. the number of tags
+// is exceeded if (ntags & 0xffff0000).  Here we use the more conventional
+// meaning of "max" as "last valid", so the check should be (nags > Max).
+#define headerMaxTags ((64<<10)-1)
+#define headerMaxData ((16<<20)-1)
+
+// rpm also specifies the "maximum no. of bytes permitted in a header",
+// and sets the limit to 32M.  However, according to my reckoning,
+// headerMaxTags and headerMaxData already cut the limit down to about 17M.
+// Logic, as opposed to folly, never was a particular strength of rpm.
+#define headerMaxSize (8 + 16 * headerMaxTags + headerMaxData)
 
 // A header starts with magic (8 bytes) + (il,dl) sizes (8 bytes).
 static const unsigned char headerMagic[8] = {
@@ -35,16 +51,13 @@ static const unsigned char headerMagic[8] = {
 #define headerCheckMagic(lead) (memcmp(lead, headerMagic, 8) == 0)
 
 // Returns the size of header's data after (il,dl).
-static inline int headerDataSize(char lead[16])
+static inline ssize_t headerDataSize(char lead[16])
 {
     unsigned *ei = (unsigned *) (lead + 8);
     unsigned il = ntohl(ei[0]);
     unsigned dl = ntohl(ei[1]);
-    // Check for overflows.
-    if (il > headerMaxSize / 16 || dl > headerMaxSize)
-	return -1;
-    size_t dataSize = 16 * il + dl;
-    if (dataSize == 0 || 8 + dataSize > headerMaxSize)
-	return -1;
-    return dataSize;
+    // Check the limits, further do not permit zero values.
+    if (il - 1 > headerMaxTags - 1) return -1;
+    if (dl - 1 > headerMaxData - 1) return -1;
+    return 16 * il + dl;
 }
