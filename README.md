@@ -10,12 +10,12 @@ frame, followed by data frames.  There is no trailing checksum.
 
 ### The leading frame
 ```
-magic 0x184D2A55 | size = 12 | total uncompressed size | max normal frame size
-   (4 bytes)     | (4 bytes) |        (8 bytes)        |       (4 bytes)
+magic 0x184D2A55 | size = 16 | total uncompressed size | buf1 size | jbuf size
+   (4 bytes)     | (4 bytes) |        (8 bytes)        | (4 bytes) | (4 bytes)
 ```
 The `total uncompressed size` field allows the following fast check to be
 performed by APT: if the size has changed, there is no need to calculate
-the MD5 checksum of the data.  The last field assists optimal memory
+the MD5 checksum of the data.  The last two fields assist optimal memory
 allocation in the decoder (see below).
 
 ### The dictionary frame
@@ -74,7 +74,11 @@ chunk, while decoding normal frames may require a somewhat complex memory
 arrangement of the dictionary and the output buffer.)
 
 The decoder is expected to decode normal frames without extra malloc calls.
-To assist this process, the leading frame provides the `max normal frame size`,
-which is the maximum sum of `compressed size + uncompressed size` among the
-normal frames.  Thus the maximum valid `max normal frame size` is
-`LZ4_COMPRESSBOUND(128<<10) + (128<<10)`.
+To assist this process, the leading frame provides the `buf1 size` field,
+which must be set to either of the following, whichever is greater:
+* `compressed size` from the dictionary frame;
+* maximum `compressed size + uncompressed size` among the normal frames;
+* maximum `compressed size` among the jumbo frames.
+
+Jumbo frames can be decoded without repeated malloc/realloc calls as well:
+the `jbuf size` provides the maximum `uncompressed size` among the jumbo frames.
