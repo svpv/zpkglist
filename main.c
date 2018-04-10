@@ -88,7 +88,7 @@ int main(int argc, char **argv)
 	ret = zpkglistFdopen(&z, 0, err);
 	if (ret > 0) {
 	    if (qf) {
-		void *blob;
+		struct HeaderBlob *blob;
 		func = "zpkglistNextMalloc";
 		while ((ret = zpkglistNextMalloc(z, &blob, NULL, err)) > 0) {
 		    Header h = headerImport(blob, ret, 0);

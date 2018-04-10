@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Alexey Tourbin
+// Copyright (c) 2017, 2018 Alexey Tourbin
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -61,21 +61,37 @@ void zpkglistClose(struct zpkglistReader *z);
 ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp,
 		     const char *err[2]) __attribute__((nonnull));
 
+// Exposes the inner workings of a blob.
+// All integers are in network byte order.
+struct HeaderBlob {
+    // The number of header entries aka "index length".
+    unsigned il;
+    // The size of the data segment stored after ee[] aka "data length".
+    unsigned dl;
+    // Each header entry corresponds to a tag.
+    struct HeaderEntry {
+	int tag; // e.g. RPMTAG_NAME
+	int type; // e.g. RPM_STRING_TYPE or RPM_INT32_TYPE
+	unsigned off; // offset into the data segment
+	unsigned cnt; // number of elements in array, or 1
+    } ee[];
+};
+
 #include <stdint.h>
 
 // Read the next header blob, malloc a buffer.
-ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **blobp,
+ssize_t zpkglistNextMalloc(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
 // Like NextMalloc except that adds another level of indirection and
 // returns the address of the internal pointer to the malloc'd chunk
-// with the blob.  To take ownership of the chunk, one must nullify
+// with the blob.  To take ownership of the chunk, the caller must nullify
 // the pointer.  Otherwise, the chunk will be reused in the next call.
-ssize_t zpkglistNextMallocP(struct zpkglistReader *z, void ***blobpp,
+ssize_t zpkglistNextMallocP(struct zpkglistReader *z, struct HeaderBlob ***blobpp,
 	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
 // Read the next header blob into an internal buffer.
-ssize_t zpkglistNextView(struct zpkglistReader *z, void **blobp,
+ssize_t zpkglistNextView(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
 #ifdef __cplusplus

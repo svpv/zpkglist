@@ -161,7 +161,7 @@ ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
     return z->ops->opBulk(z, bufp, err);
 }
 
-ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **blobp,
+ssize_t zpkglistNextMalloc(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2])
 {
     ssize_t ret = z->ops->opNextMalloc(z, posp, err);
@@ -170,16 +170,16 @@ ssize_t zpkglistNextMalloc(struct zpkglistReader *z, void **blobp,
     return ret;
 }
 
-ssize_t zpkglistNextMallocP(struct zpkglistReader *z, void ***blobpp,
+ssize_t zpkglistNextMallocP(struct zpkglistReader *z, struct HeaderBlob ***blobpp,
 	int64_t *posp, const char *err[2])
 {
     ssize_t ret = z->ops->opNextMalloc(z, posp, err);
     if (ret > 0)
-	*blobpp = &z->hdrBuf;
+	*blobpp = (void *) &z->hdrBuf;
     return ret;
 }
 
-ssize_t zpkglistNextView(struct zpkglistReader *z, void **blobp,
+ssize_t zpkglistNextView(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2])
 {
     ssize_t ret = z->ops->opNextMalloc(z, posp, err);
