@@ -18,8 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef ZPKGLIST_H
-#define ZPKGLIST_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,6 +95,4 @@ ssize_t zpkglistNextView(struct zpkglistReader *z, struct HeaderBlob **blobp,
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

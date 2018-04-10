@@ -137,7 +137,7 @@ static bool zLoop(struct Z *z, struct stats *stats,
 	return ERRSTR("bad header magic"), false;
 
     // The size of the header's data after (il,dl).
-    int dataSize = headerDataSize(lead);
+    ssize_t dataSize = headerDataSize(lead);
     if (dataSize < 0)
 	return ERRSTR("bad header size"), false;
 

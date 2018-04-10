@@ -75,7 +75,7 @@ int main(int argc, char **argv)
 	assert(!isatty(1));
     const char *func;
     const char *err[2];
-    int ret;
+    ssize_t ret;
     if (!decode && !qf) {
 	func = "zpkglistCompress";
 	ret = zpkglistCompress(0, 1, err, NULL, NULL);

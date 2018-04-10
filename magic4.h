@@ -7,7 +7,7 @@ enum magic4 {
     MAGIC4_XZ,
 };
 
-// Unlike bswap, yileds constant expr for a constant arg.
+// Unlike bswap, yields constant expr for a constant arg.
 #define MAGIC4SWAP(x) \
     ((((x) & 0x000000ff) << 0x18) | \
      (((x) & 0xff000000) >> 0x18) | \
