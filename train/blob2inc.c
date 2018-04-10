@@ -75,10 +75,10 @@ int main(int argc, char **argv)
     }
     unsigned char *p = buf;
     unsigned char *end = buf + arraySize;
-    *end = '\0';
+    *end = '\0'; // the sentinel, non-printable
     printf("static const char %s[%zu] = {\n", arrayName, arraySize);
-    unsigned char c = *p++;
     putchar('"');
+    unsigned char c = *p++;
     if (!xisprint(c))
 	goto nonprintable;
     while (1) {
@@ -104,9 +104,12 @@ int main(int argc, char **argv)
 	    if (!xisprint(c))
 		break;
 	}
+	// Reached the sentinel, p points past the sentinel?
+	if (p > end)
+	    break;
 nonprintable:
 	// followed by non-printable characters.
-	while (p < end) {
+	while (1) {
 	    switch (c) {
 	    // These escape characters provide the shortest codes;
 	    // '\a' is excluded because it can be encoded with '\7'.
@@ -124,11 +127,13 @@ nonprintable:
 	    default: printf("\\%o", c);
 	    }
 	    c = *p++;
+	    if (p > end)
+		break;
 	    if (xisprint(c))
 		break;
 	}
 	putchar('"'), putchar('\n');
-	if (p == end)
+	if (p > end)
 	    break;
 	putchar('"');
     }
