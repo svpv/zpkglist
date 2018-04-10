@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Alexey Tourbin
+// Copyright (c) 2017, 2018 Alexey Tourbin
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -110,6 +110,13 @@ int main(int argc, char **argv)
 nonprintable:
 	// followed by non-printable characters.
 	while (1) {
+	    // If the last input byte is a zero byte, identify it with the
+	    // trailing zero byte which comes on behalf of this string literal.
+	    // Then the arraySize and the literal size will match exactly.
+	    if (p == end && c == '\0') {
+		p++;
+		break;
+	    }
 	    switch (c) {
 	    // These escape characters provide the shortest codes;
 	    // '\a' is excluded because it can be encoded with '\7'.
