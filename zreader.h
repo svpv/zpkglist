@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <stdbool.h>
 #include <sys/types.h> // ssize_t
 
 #pragma GCC visibility push(hidden)
@@ -31,9 +32,17 @@ int zreader_open(struct zreader **zp, struct fda *fda, const char *err[2])
 
 void zreader_free(struct zreader *z);
 
-// Get the frame with up to 4 header blobs (starts with the magic).
-ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp, const char *err[2])
-			 __attribute__((nonnull(1,2,4)));
+// Get the frame with up to 4 header blobs.
+// Pointer to an internal buffer is returned via bufp.  If the mallocJumbo
+// mode is enabled, jumbo frames (unlike normal frames) will be malloc'd,
+// and ownership over the malloc'd chunk is transfered to the caller.
+// The situation is signaled by returning the negative size, ret < 128K.
+// There are no magic bytes with the first header; however, with ret > 0,
+// the magic is implicitly prepended to the buffer (starting at *bufp - 8;
+// such prepending is obviously not possible with malloc'd chunks).
+ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
+			 bool mallocJumbo, const char *err[2])
+			 __attribute__((nonnull(1,2,5)));
 
 unsigned zreader_contentSize(struct zreader *z) __attribute__((nonnull));
 

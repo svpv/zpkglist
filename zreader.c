@@ -154,20 +154,37 @@ int zreader_open(struct zreader **zp, struct fda *fda, const char *err[2])
     return rc;
 }
 
-ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp, const char *err[2])
+ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
+			 bool mallocJumbo, const char *err[2])
 {
     if (z->eof)
 	return 0;
-    // The frame has already been peeked upon, validate the sizes.
+    // The frame has already been peeked upon, decode the sizes.
     size_t zsize = le32toh(z->lead[1]) - 4;
     size_t size = le32toh(z->lead[2]);
-    if (!size || size > z->maxSize)
-	return ERRSTR("bad data size"), -1;
-    if (!zsize || zsize > z->zmaxSize || zsize > LZ4_COMPRESSBOUND(size))
+    void *zbuf;
+    // Validate the size, and check that zsize fits into the buffer.
+    if (size > (128<<10)) {
+	if (size > z->jbufsize)
+	    return ERRSTR("bad data size"), -1;
+	if (zsize > z->buf1size)
+	    return ERRSTR("bad data zsize"), -1;
+	zbuf = z->buf1;
+    }
+    else {
+	if (!size)
+	    return ERRSTR("bad data size"), -1;
+	if (size + zsize > z->buf1size)
+	    return ERRSTR("bad data size+zsize"), -1;
+	zbuf = z->buf1 + size;
+    }
+    // Further check that zsize is consistent with the size.
+    if (!zsize || zsize > LZ4_COMPRESSBOUND(size))
 	return ERRSTR("bad data zsize"), -1;
+
     // Read this frame's data + the next frame's header.
     off_t pos = tella(z->fda) - 12;
-    int ret = reada(z->fda, z->zbuf, zsize + 12);
+    ssize_t ret = reada(z->fda, zbuf, zsize + 12);
     if (ret < 0)
 	return ERRNO("read"), -1;
     if (ret == zsize)
@@ -176,13 +193,43 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp, const char
 	return ERRSTR("unexpected EOF"), -1;
     else {
 	// Save the next frame's header for the next call.
-	memcpy(z->lead, z->zbuf + zsize, 12);
+	memcpy(z->lead, zbuf + zsize, 12);
 	// Peek at the next frame's header.
 	if (z->lead[0] != MAGIC4_W_ZPKGLIST_FRAME)
 	    return ERRSTR("bad data frame magic"), -1;
     }
+
+    // Jumbo frame?
+    if (size > (128<<10)) {
+	void *buf;
+	// Malloc requested?
+	if (mallocJumbo)
+	    buf = malloc(size);
+	else {
+	    // Will uncompress into z->jbuf.
+	    if (!z->jbuf) {
+		z->jbuf = malloc(8 + z->jbufsize);
+		if (z->jbuf) {
+		    // Implicit magic bytes.
+		    memcpy(z->jbuf, headerMagic, 8);
+		    z->jbuf += 8;
+		}
+	    }
+	    buf = z->jbuf;
+	}
+	if (!buf)
+	    return ERRNO("malloc"), -1;
+	// Uncompress without dictionary.
+	int zret = LZ4_decompress_fast(zbuf, buf, size);
+	if (zret != zsize)
+	    return ERROR("LZ4_decompress_fast", "decompression failed"), -1;
+	*bufp = buf;
+	// Malloc'd jumbo frame signaled with big negative return.
+	return buf == z->jbuf ? size : -size;
+    }
+
     // Restore the last bytes of the dictionary.
-    memcpy(z->buf - 8, z->save, 8);
+    memcpy(z->buf1 - 8, z->save, 8);
     // Decompress the frame.  This "fast" function is somewhat unsafe: although
     // it does not write past z->buf + size, it can read past z->zbuf + zsize.
     // I opt for speed nonetheless.  This file format has not been designed for
@@ -192,18 +239,15 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp, const char
     // structure is checked rather meticulously (e.g. decompression doesn't even
     // start before the next frame's magic is verified).  This should be enough
     // to protect against unintended data corruption.
-    ret = LZ4_decompress_fast_usingDict(z->zbuf, z->buf, size, z->buf - (64 << 10), 64 << 10);
-    if (ret != zsize)
+    int zret = LZ4_decompress_fast_usingDict(zbuf, z->buf1, size, z->buf1 - (64 << 10), 64 << 10);
+    if (zret != zsize)
 	return ERROR("LZ4_decompress_fast_usingDict", "decompression failed"), -1;
-    // Prepend the missing magic.
-    memcpy(z->buf - 8, headerMagic, 8);
-    // Append the trailing magic (not on behalf of the frame size).
-    // This may clobber z->zbuf, which should not be a problem by now.
-    memcpy(z->buf + size, headerMagic, 8);
-    *bufp = z->buf - 8;
+    // Prepend the magic, clobbers the last bytes of the dictionary.
+    memcpy(z->buf1 - 8, headerMagic, 8);
+    *bufp = z->buf1;
     if (posp)
 	*posp = pos;
-    return size + 8;
+    return size;
 }
 
 void zreader_free(struct zreader *z)
