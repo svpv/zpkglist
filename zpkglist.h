@@ -35,7 +35,7 @@ extern "C" {
 // a string which describes the error.  Both strings normally come
 // from the read-only data section.
 int zpkglistCompress(int in, int out, const char *err[2],
-		     void (*hash)(void *buf, unsigned size, void *arg), void *arg)
+		     void (*hash)(void *buf, size_t size, void *arg), void *arg)
 		     __attribute__((nonnull(3)));
 
 // For decompression, a more general "Reader" API is provided.
