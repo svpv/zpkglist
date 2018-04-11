@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Alexey Tourbin
+// Copyright (c) 2017, 2018 Alexey Tourbin
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -33,68 +33,78 @@
 struct zreader {
     struct fda *fda;
     bool eof;
-    // stats
-    unsigned contentSize;
-    unsigned maxSize;
-    unsigned zmaxSize;
-    // Compressed and decompressed buffers,
-    // maxSize and zmaxSize bytes.
-    char *buf, *zbuf;
+    size_t contentSize;
+    size_t buf1size;
+    size_t jbufsize;
+    char *buf1, *jbuf;
     // Keeps the last 8 bytes of the dictionary which are clobbered
     // to and fro with the first header's magic.
     char save[8];
-    // The leading fields of a frame to read.
+    // The leading fields of a data frame to read.
     unsigned lead[3];
 };
 
 static int zreader_begin(struct zreader *z, const char *err[2])
 {
     unsigned w[4];
+    // Read <magic,size> + contentSize.
     ssize_t ret = reada(z->fda, w, sizeof w);
     if (ret < 0)
 	return ERRNO("read"), -1;
     if (ret == 0)
 	return 0;
-    if (ret < 4)
+    if (ret < sizeof w)
 	return ERRSTR("unexpected EOF"), -1;
     if (w[0] != MAGIC4_W_ZPKGLIST)
 	return ERRSTR("bad zpkglist magic"), -1;
+    if (w[1] != htole32(16))
+	return ERRSTR("bad zpkglist frame size"), -1;
     if (w[3])
-	return ERRSTR("input too big"), -1;
+	return ERRSTR("contentSize too big"), -1;
     z->contentSize = le32toh(w[2]);
-    // Read the rest of the leading frame + the dictionary frame header.
-    ret = reada(z->fda, w, 16);
+    // Read <buf1size,jbufsize> + the dictionary frame header.
+    ret = reada(z->fda, w, sizeof w);
     if (ret < 0)
 	return ERRNO("read"), -1;
-    // Permit a truncated frame with contentSize but without (maxSize,zmaxSize).
+    // When contentSize=0, permit a truncated frame without <buf1size,jbufsize>.
     if (ret == 0 || ret == 8) {
 	if (z->contentSize)
 	    return ERRSTR("unexpected EOF"), -1;
 	return 0;
     }
-    if (ret != 16)
+    if (ret != sizeof w)
 	return ERRSTR("unexpected EOF"), -1;
     // Peek at the dictionary frame.
     if (w[2] != MAGIC4_W_ZPKGLIST_DICT)
 	return ERRSTR("bad dictionary magic"), -1;
     size_t zsize = le32toh(w[3]);
-    if (!zsize || zsize >= (64 << 10))
+    // LZ4 maxiumum compression ratio is 255, therfore assume that
+    // the compressed size of a 64K dictionary cannot go below 257 bytes.
+    if (zsize < 257 || zsize > LZ4_COMPRESSBOUND(64<<10))
 	return ERRSTR("bad dictionary zsize"), -1;
-    // The input is not empty, there's a dictionary.  Permit the situation
-    // in which there's nothing after the dictionary.  But to get there, the
-    // dictionary needs to be loaded, which in turn requires a buffer to be
-    // allocated.  In other words, only check that the sizes are not too big.
-    z->maxSize = le32toh(w[0]);
-    z->zmaxSize = le32toh(w[1]);
-    if (z->maxSize > headerMaxSize || z->maxSize > z->contentSize)
-	return ERRSTR("bad maxSize"), -1;
-    if (z->zmaxSize > LZ4_COMPRESSBOUND(z->maxSize))
-	return ERRSTR("bad zmaxSize"), -1;
-    // Allocate the buffer, first used for dictionary, then for data frames.
-    size_t alloc = z->maxSize + z->zmaxSize + 12;
-    if (alloc < zsize + 12)
-	alloc = zsize + 12;
-    char *buf = malloc((64 << 10) + alloc);
+    // Verify <buf1size,jbufsize>.
+    z->buf1size = htole32(w[0]);
+    // The buffer will be used to read the compressed dictionary.
+    if (z->buf1size < zsize)
+	return ERRSTR("bad buf1size"), -1;
+    z->jbufsize = htole32(w[1]);
+    // Jumbo frames cannot exceed header limits.
+    if (z->jbufsize > headerMaxSize)
+	return ERRSTR("bad jbufsize"), -1;
+    // If there are jumbo frames, they cannot be too small either.
+    if (z->jbufsize && z->jbufsize <= (128<<10))
+	return ERRSTR("bad jbufsize"), -1;
+    // According to the spec, buf1size cannot be too big.
+    if (z->buf1size > zsize &&
+	z->buf1size > (128<<10) + LZ4_COMPRESSBOUND(128<<10) &&
+	z->buf1size > LZ4_COMPRESSBOUND(z->jbufsize))
+	return ERRSTR("bad buf1size"), -1;
+
+    // Allocate the buffer, first will be used to read in the dictionary,
+    // then data frames.  The uncompressed dictionary will be placed at
+    // the beginning, then goes the buf1size segment proper.  Need 12 extra
+    // bytes to peek at the next frame's header.
+    char *buf = malloc((64<<10) + z->buf1size + 12);
     if (!buf)
 	return ERRNO("malloc"), -1;
     // Read the dictionary data + the first frame's header.
@@ -113,14 +123,9 @@ static int zreader_begin(struct zreader *z, const char *err[2])
     memcpy(z->lead, buf + (64 << 10) + zsize, 12);
     if (z->lead[0] != MAGIC4_W_ZPKGLIST_FRAME)
 	return free(buf), ERRSTR("bad data frame magic"), -1;
-    // There is some data, it's time to check the sizes.  E.g. if maxSize is 0,
-    // the allocated buffer is too small, it's not gonna work.
-    if (!z->contentSize)
+    // There is some data, it's time to check the contentSize.
+    if (!z->contentSize || z->contentSize < z->jbufsize)
 	return free(buf), ERRSTR("bad contentSize"), -1;
-    if (!z->maxSize)
-	return free(buf), ERRSTR("bad maxSize"), -1;
-    if (!z->zmaxSize)
-	return free(buf), ERRSTR("bad zmaxSize"), -1;
     // Decompress the dictionary.  The dictionary is placed right before
     // z->buf.  Compared to "external dictionary mode", this speeds up
     // subsequent decompression by a factor of 1.5.
@@ -128,9 +133,9 @@ static int zreader_begin(struct zreader *z, const char *err[2])
     if (ret != (64 << 10))
 	return free(buf), ERROR("LZ4_decompress_safe", "cannot decompress dictionary"), -1;
     // Are we there yet? (c) Shrek
-    z->buf = buf + (64 << 10);
-    z->zbuf = z->buf + z->maxSize;
-    memcpy(z->save, z->buf - 8, 8);
+    z->buf1 = buf + (64 << 10);
+    z->jbuf = NULL;
+    memcpy(z->save, z->buf1 - 8, 8);
     return 1;
 }
 
@@ -205,8 +210,10 @@ void zreader_free(struct zreader *z)
 {
     if (!z)
 	return;
-    if (z->buf)
-	free(z->buf - (64 << 10));
+    if (z->buf1)
+	free(z->buf1 - (64 << 10));
+    if (z->jbuf)
+	free(z->jbuf - 8);
     free(z);
 }
 
