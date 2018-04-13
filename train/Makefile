@@ -13,12 +13,14 @@ LISTS = \
 	$(P8)/x86_64/base/pkglist.debuginfo.xz
 
 RPM_OPT_FLAGS ?= -O2 -g -Wall
-# zstd -> BUILD/zstd-1.1.4
-ZSTD_ADD = -Izstd/lib/dictBuilder zstd/lib/libzstd.a
+# zstd -> BUILD/zstd-1.3.4
+ZSTD_ADD = -Izstd/lib/dictBuilder -pthread
 
 all: train blob2inc dumpinc rpmhdr.zstdict rpmhdrdict.h rpmhdrzdict.h
-train: train.c
+train: train.c zstd/lib/libzstd.a
 	$(CC) $(RPM_OPT_FLAGS) $^ $(ZSTD_ADD) -o $@
+zstd/lib/libzstd.a:
+	make -C zstd/lib libzstd.a-mt
 rpmhdr.zstdict: train
 	xzcat -dc $(LISTS) |./train >rpmhdr.zstdict
 blob2inc: blob2inc.c
