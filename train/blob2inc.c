@@ -139,11 +139,12 @@ nonprintable:
 	    if (xisprint(c))
 		break;
 	}
-	putchar('"'), putchar('\n');
 	if (p > end)
 	    break;
+	putchar('"'), putchar('\n');
 	putchar('"');
     }
+    putchar('"'), putchar('\n');
     printf("};\n");
     assert(fflush(stdout) == 0);
     return 0;
