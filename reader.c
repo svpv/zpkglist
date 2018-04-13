@@ -187,3 +187,8 @@ ssize_t zpkglistNextView(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	*blobp = z->hdrBuf;
     return ret;
 }
+
+int64_t zpkglistContentSize(struct zpkglistReader *z)
+{
+    return z->ops->opContentSize(z);
+}

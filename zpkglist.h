@@ -93,6 +93,15 @@ ssize_t zpkglistNextMallocP(struct zpkglistReader *z, struct HeaderBlob ***blobp
 ssize_t zpkglistNextView(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
+// Returns the size the data stream, i.e. the sum of the header blob sizes,
+// including the leading magic bytes stripped from struct HeaderBlob.
+// Note however that the library concatenates compressed streams transparently;
+// for the contentSize to be used reliable, the caller must have some control
+// over how relevant streams are created.  Returns -1 when the size is not known.
+// There is no error return, since the size actually becomes known or unknown
+// at an earlier stage.
+int64_t zpkglistContentSize(struct zpkglistReader *z);
+
 #ifdef __cplusplus
 }
 #endif
