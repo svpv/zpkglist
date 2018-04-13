@@ -34,7 +34,7 @@ extern "C" {
 // the first string is typically a function name, and the second is
 // a string which describes the error.  Both strings normally come
 // from the read-only data section.
-int zpkglistCompress(int in, int out, const char *err[2],
+int zpkglistCompress(int infd, int outfd, const char *err[2],
 		     void (*hash)(void *buf, size_t size, void *arg), void *arg)
 		     __attribute__((nonnull(3)));
 

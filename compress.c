@@ -303,28 +303,28 @@ static bool zLoop(struct Z *z, struct stats *stats,
     }
 }
 
-int zpkglistCompress(int in, int out, const char *err[2],
+int zpkglistCompress(int infd, int outfd, const char *err[2],
 		     void (*hash)(void *buf, size_t size, void *arg), void *arg)
 {
     // Verify the output fd.
     struct stat st;
-    if (fstat(out, &st) < 0)
+    if (fstat(outfd, &st) < 0)
 	return ERRNO("fstat"), -1;
     if (!S_ISREG(st.st_mode))
 	return ERRSTR("output not a regular file"), -1;
     if (st.st_size)
 	return ERRSTR("output file not empty"), -1;
-    if (lseek(out, 0, SEEK_CUR) != 0)
+    if (lseek(outfd, 0, SEEK_CUR) != 0)
 	return ERRSTR("output file not positioned at the beginning"), -1;
 
     // Prepare the leading frame.
     unsigned frame[] = { htole32(0x184D2A55), htole32(16), 0, 0, 0, 0 };
-    if (!xwrite(out, frame, sizeof frame))
+    if (!xwrite(outfd, frame, sizeof frame))
 	return ERRNO("write"), -1;
 
     // Open input.
     struct zpkglistReader *zin;
-    int rc = zpkglistFdopen(&zin, in, err);
+    int rc = zpkglistFdopen(&zin, infd, err);
     if (rc <= 0)
 	return rc;
 
@@ -335,7 +335,7 @@ int zpkglistCompress(int in, int out, const char *err[2],
 	return -1;
     }
     struct stats stats = { 0, 0, 0 };
-    if (!zLoop(z, &stats, zin, out, err, hash, arg)) {
+    if (!zLoop(z, &stats, zin, outfd, err, hash, arg)) {
 	free(z);
 	zpkglistFree(zin);
 	return -1;
@@ -350,12 +350,12 @@ int zpkglistCompress(int in, int out, const char *err[2],
     // Rewrite the leading frame.
     if (stats.total > ~0U)
 	return ERRSTR("output too big"), -1;
-    if (lseek(out, 0, SEEK_SET) != 0)
+    if (lseek(outfd, 0, SEEK_SET) != 0)
 	return ERRNO("lseek"), -1;
     frame[2] = htole32(stats.total);
     frame[4] = htole32(stats.buf1size);
     frame[5] = htole32(stats.jbufsize);
-    if (!xwrite(out, frame, sizeof frame))
+    if (!xwrite(outfd, frame, sizeof frame))
 	return ERRNO("write"), -1;
     return 1;
 }
