@@ -52,12 +52,13 @@ static void load(void)
     size_t dataSize = headerDataSize(lead);
     assert(dataSize > 0);
 
+    bool eof = false;
+    int nbFrames = 0;
     char *buf = samples.samplesBuffer;
     const char *end = buf + sizeof samples.samplesBuffer;
 
-    while (1) {
+    do {
 	char *cur = buf;
-	bool eof = false;
 	// Trying to fit four headers into 128K.
 	for (int i = 0; i < 4; i++) {
 	    // Put this header's leading bytes.
@@ -90,14 +91,14 @@ static void load(void)
 	    if ((cur - buf) + (16 + dataSize) > (128 << 10))
 		break;
 	}
+	if (++nbFrames % 3) // frame sampling
+	    continue;
 	size_t fill = cur - buf;
 	if (fill > maxSampleSize)
 	    fill = maxSampleSize;
 	buf += fill;
 	samples.samplesSizes[samples.nbSamples++] = fill;
-	if (eof)
-	    break;
-    }
+    } while (!eof);
     assert(!ferror(stdin));
     assert(samples.nbSamples);
 }
