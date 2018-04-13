@@ -115,16 +115,17 @@ int main(int argc, char **argv)
     assert(!isatty(1));
     load();
     ZDICT_cover_params_t params = {
+	.d = 6,
 	.nbThreads = 2,
 	.zParams.notificationLevel = 3,
-	.zParams.compressionLevel = 1,
+	.zParams.compressionLevel = 3,
     };
     char dict[64<<10];
     size_t dictSize = ZDICT_optimizeTrainFromBuffer_cover(dict, sizeof dict,
 	    samples.samplesBuffer, samples.samplesSizes, samples.nbSamples,
 	    &params);
     assert(dictSize == sizeof dict);
-    fprintf(stderr, "best parameters: k=%u d=%u\n", params.k, params.d);
+    fprintf(stderr, "best parameters: d=%u k=%u\n", params.d, params.k);
     size_t ret = fwrite(dict, 1, dictSize, stdout);
     assert(ret == dictSize);
     assert(fflush(stdout) == 0);

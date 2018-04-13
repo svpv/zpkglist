@@ -20,6 +20,7 @@ all: train blob2inc dumpinc rpmhdr.zstdict rpmhdrdict.h rpmhdrzdict.h
 train: train.c zstd/lib/libzstd.a
 	$(CC) $(RPM_OPT_FLAGS) $^ $(ZSTD_ADD) -o $@
 zstd/lib/libzstd.a:
+	sed -i- '/ kMaxK /s/ 2000 / 1000 /' zstd/lib/dictBuilder/cover.c
 	make -C zstd/lib libzstd.a-mt
 rpmhdr.zstdict: train
 	xzcat -dc $(LISTS) |./train >rpmhdr.zstdict
