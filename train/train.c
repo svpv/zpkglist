@@ -91,9 +91,11 @@ static void load(void)
 	    if ((cur - buf) + (16 + dataSize) > (128 << 10))
 		break;
 	}
+	size_t fill = cur - buf;
+	if (fill > (128<<10)) // jumbo frames don't use dictionary
+	    continue;
 	if (++nbFrames % 3) // frame sampling
 	    continue;
-	size_t fill = cur - buf;
 	if (fill > maxSampleSize)
 	    fill = maxSampleSize;
 	buf += fill;
