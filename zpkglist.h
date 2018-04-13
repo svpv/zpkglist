@@ -88,6 +88,8 @@ ssize_t zpkglistNextMallocP(struct zpkglistReader *z, struct HeaderBlob ***blobp
 	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
 // Read the next header blob into an internal buffer.
+// On architectures that don't support fast unaligned reads,
+// struct HeaderBlob will be aligned to a multiple of 4 bytes.
 ssize_t zpkglistNextView(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
