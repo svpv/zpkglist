@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <inttypes.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -30,14 +31,21 @@
 #include "xwrite.h"
 
 #define PROG "zpkglist"
+#define warn(fmt, args...) fprintf(stderr, "%s: " fmt "\n", PROG, ##args)
+#define die(fmt, args...) warn(fmt, ##args), exit(128) // like git
 
 enum {
-    OPT_QF = 256,
+    OPT_HELP = 256,
+    OPT_QF,
+    OPT_PRINTSIZE,
 };
 
 static const struct option longopts[] = {
     { "qf", required_argument, NULL, OPT_QF },
-    { "help", no_argument, NULL, 'h' },
+    { "print-content-size", no_argument, NULL, OPT_PRINTSIZE },
+    { "decompress", no_argument, NULL, 'd' },
+    { "uncompress", no_argument, NULL, 'd' },
+    { "help", no_argument, NULL, OPT_HELP },
     { NULL },
 };
 
@@ -46,8 +54,9 @@ int main(int argc, char **argv)
     int c;
     bool usage = false;
     bool decode = false;
+    bool printsize = false;
     const char *qf = NULL;
-    while ((c = getopt_long(argc, argv, "dh", longopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "d", longopts, NULL)) != -1) {
 	switch (c) {
 	case 0:
 	    break;
@@ -57,35 +66,47 @@ int main(int argc, char **argv)
 	case OPT_QF:
 	    qf = optarg;
 	    break;
+	case OPT_PRINTSIZE:
+	    printsize = true;
+	    break;
 	default:
 	    usage = 1;
 	}
     }
     if (argc > optind && !usage) {
-	fprintf(stderr, PROG ": too many arguments\n");
+	warn("too many arguments");
+	usage = 1;
+    }
+    if (isatty(0) && !usage) {
+	warn("%s data cannot be read from a terminal",
+	    decode || qf || printsize ? "binary" : "compressed");
 	usage = 1;
     }
     if (usage) {
 	fprintf(stderr, "Usage: " PROG "[-d] [--qf=FMT] <pkglist\n");
-	return 1;
+	return 2;
     }
-    assert(!isatty(0));
+    if (!qf && !printsize && isatty(1))
+	die("%s data cannot be written to a terminal",
+	    decode ? "binary" : "compressed");
+    if (qf && printsize)
+	die("--qf=FMT and --print-content-size are mutually exclusive");
     posix_fadvise(0, 0, 0, POSIX_FADV_SEQUENTIAL);
-    if (!qf)
-	assert(!isatty(1));
     const char *func;
     const char *err[2];
     ssize_t ret;
-    if (!decode && !qf) {
+    if (!decode && !qf && !printsize) {
 	func = "zpkglistCompress";
 	ret = zpkglistCompress(0, 1, err, NULL, NULL);
 	if (ret == 0)
-	    fprintf(stderr, PROG ": warning: empty input (valid output still written)\n");
+	    warn("empty input (valid output still written)");
     }
     else {
 	struct zpkglistReader *z;
 	func = "zpkglistFdopen";
 	ret = zpkglistFdopen(&z, 0, err);
+	if (ret == 0 && printsize)
+	    puts("0");
 	if (ret > 0) {
 	    if (qf) {
 		struct HeaderBlob *blob;
@@ -109,6 +130,12 @@ int main(int argc, char **argv)
 		    headerFree(h);
 		}
 	    }
+	    else if (printsize) {
+		int64_t contentSize = zpkglistContentSize(z);
+		if (contentSize < 0)
+		    return 1; // unknown
+		printf("%" PRId64 "\n", contentSize);
+	    }
 	    else {
 		void *buf;
 		func = "zpkglistBulk";
@@ -125,10 +152,9 @@ int main(int argc, char **argv)
     }
     if (ret < 0) {
 	if (strcmp(func, err[0]) == 0)
-	    fprintf(stderr, "%s: %s\n", err[0], err[1]);
+	    die("%s: %s", err[0], err[1]);
 	else
-	    fprintf(stderr, "%s: %s: %s\n", func, err[0], err[1]);
-	return 1;
+	    die("%s: %s: %s", func, err[0], err[1]);
     }
     return 0;
 }
