@@ -1,5 +1,5 @@
 ALT = /ALT
-P8 = $(ALT)/p8
+Stable = $(ALT)/p8
 Sisyphus = $(ALT)/Sisyphus
 # Intermingle distro/arch lists due to memory limits.
 LISTS = \
@@ -7,10 +7,11 @@ LISTS = \
 	$(Sisyphus)/x86_64/base/srclist.classic.xz \
 	$(Sisyphus)/noarch/base/pkglist.classic.xz \
 	$(Sisyphus)/i586/base/pkglist.debuginfo.xz \
-	$(P8)/i586/base/pkglist.classic.xz \
-	$(P8)/i586/base/srclist.classic.xz \
-	$(P8)/noarch/base/pkglist.classic.xz \
-	$(P8)/x86_64/base/pkglist.debuginfo.xz
+	$(Stable)/i586/base/pkglist.classic.xz \
+	$(Stable)/i586/base/srclist.classic.xz \
+	$(Stable)/noarch/base/pkglist.classic.xz \
+	$(Stable)/x86_64/base/pkglist.debuginfo.xz \
+	$(Sisyphus)/x86_64-i586/base/pkglist.classic.xz
 
 RPM_OPT_FLAGS ?= -O2 -g -Wall
 # zstd -> BUILD/zstd-1.3.4
