@@ -29,7 +29,7 @@ extern "C" {
 // Compress a list of rpm headers, such as produced by genpkglist,
 // into zpkglist file format (see README.md).  Returns 1 on success,
 // 0 on empty input (with valid output still written), -1 on error.
-// File descriptors and remain open.
+// File descriptors remain open.
 // Information about an error is returned via the err[2] parameter:
 // the first string is typically a function name, and the second is
 // a string which describes the error.  Both strings normally come
@@ -39,7 +39,6 @@ int zpkglistCompress(int infd, int outfd, const char *err[2],
 		     __attribute__((nonnull(3)));
 
 // For decompression, a more general "Reader" API is provided.
-// It can also be used to iterate uncompressed header lists.
 struct zpkglistReader;
 // Returns 1 on success, 0 on EOF at the beginning of input
 // (no headers, the Reader handle is not created), -1 on error.
@@ -55,8 +54,7 @@ void zpkglistClose(struct zpkglistReader *z);
 // e.g. for checksumming, with optimal buffer management.
 // Returns the number of bytes read, 0 on EOF, -1 on error.
 // The pointer to the internal buffer is returned via bufp.
-// Uncompressed data (such as header magic) is not validated.
-// Header boundaries are not preserved.
+// Uncompressed data is not validated.  Header boundaries are not preserved.
 ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp,
 		     const char *err[2]) __attribute__((nonnull));
 
@@ -82,7 +80,7 @@ struct HeaderBlob {
 ssize_t zpkglistNextMalloc(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2]) __attribute__((nonnull(1,2,4)));
 
-// Like NextMalloc except that adds another level of indirection and
+// Like NextMalloc except that it adds another level of indirection and
 // returns the address of the internal pointer to the malloc'd chunk
 // with the blob.  To take ownership of the chunk, the caller must nullify
 // the pointer.  Otherwise, the chunk will be reused in the next call.
