@@ -13,10 +13,10 @@ frame, followed by data frames.  There is no trailing checksum.
 magic 0x184D2A55 | size = 16 | total uncompressed size | buf1 size | jbuf size
    (4 bytes)     | (4 bytes) |        (8 bytes)        | (4 bytes) | (4 bytes)
 ```
-The `total uncompressed size` field allows the following fast check to be
-performed by APT: if the size has changed, there is no need to calculate
-the MD5 checksum of the data.  The last two fields assist optimal memory
-allocation in the decoder (see below).
+The `total uncompressed size` is the size of the original uncompressed data.
+This field allows the following check to be performed by APT-RPM: if the size
+has changed, there is no need to calculate the MD5 checksum of the data.
+The last two fields assist optimal memory allocation in the decoder (see below).
 
 ### The dictionary frame
 ```
@@ -24,7 +24,7 @@ magic 0x184D2A56 | compressed size |  compressed data
    (4 bytes)     |    (4 bytes)    | (compressed size bytes)
 ```
 The dictionary is compressed with LZ4.
-The uncompressed size of the dictionary is 65,536 bytes.
+The uncompressed size of the dictionary is `64<<10` bytes.
 Using exactly this size enables important optimizations in the LZ4 library.
 
 In a file with no data frames (`total uncompressed size = 0`), there should be
@@ -33,7 +33,7 @@ no dictionary.  To decode data frames, though, the dictionary must be present.
 ### Data frames
 ```
 magic 0x184D2A57 | compressed size + 4 | uncompressed size |  compressed data
-   (4 bytes)     |    (4 bytes)        |     (4 bytes)     | (compressed size - 4 bytes)
+   (4 bytes)     |    (4 bytes)        |     (4 bytes)     | (compressed size bytes)
 ```
 Frame data is compressed with LZ4, normally using the dictionary (see below).
 
@@ -50,17 +50,19 @@ Each uncompressed data frame contains 1, 2, 3, or 4
 There is no leading magic with the first header; it can be easily restored
 upon the decoding with a special buffer management technique.  Subsequent
 headers start with the magic, to facilitate fast recovery of original data.
+Thus the sum of `uncompressed size` fields of all data frames and the leading
+frame's `total uncompressed size` differ by a multiple of eight bytes.
 
 All 4-byte and 8-byte integers (the latter being the `total uncompressed size`
 field) are stored in little-endian byte order (as in LZ4 skippable frames).
 The `il` and `dl` sizes are stored in network byte order; they are specific
-to RPM, not to zpkglist.
+to the RPM header format, not to the zpkglist file format.
 
 ### Normal frames and jumbo frames
 
 There are further two kinds of data frames: normal frames and jumbo frames.
 A frame is a jumbo frame if and only if it contains a single RPM header
-whose `uncompressed size` is greater than 128K.  Otherwise, the frame
+and the frame's `uncompressed size` is greater than 128K.  Otherwise, the frame
 is a normal one: its data size is less than or equal to `128<<10` bytes,
 and it can hold more than one header blob.  (This implies that big headers
 cannot be combined within a single frame.  The classification is based
