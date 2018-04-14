@@ -56,34 +56,32 @@ static bool generic_opNextRead(struct zpkglistReader *z,
     return true;
 }
 
-// Reallocate z->hdrBuf for opNextMalloc.
+// Reallocate z->buf for opNextMalloc.
 void *generic_opHdrBuf(struct zpkglistReader *z, size_t size)
 {
     // For the first time, allocate the exact size.
     // Roudning up only helps with reallocs.
-    if (!z->hdrBuf) {
-	z->hdrBufSize = size;
-	return z->hdrBuf = malloc(z->hdrBufSize = size);
-    }
+    if (!z->buf)
+	return z->buf = malloc(z->bufSize = size);
     // We have the buffer, so this is the second-time logic.
     // Adjacent header blobs differ in size only by a few hundred bytes,
     // on average.  A modest bump of the size reduces the number of malloc
     // calls by a factor of 1.5.
-    if (z->hdrBufSize < size) {
-	free(z->hdrBuf);
+    if (z->bufSize < size) {
+	free(z->buf);
 	size = (size + 1536) & ~1023;
-	return z->hdrBuf = malloc(z->hdrBufSize = size);
+	return z->buf = malloc(z->bufSize = size);
     }
     // If the buffer's somewhat big, maybe try to switch to a smaller one.
     // For bloated headers with changelogs, we have the following quantiles:
     // 75% - 7K, 90% - 16K, 95% - 26K, 99% - 79K.
     size = (size + 16384) & ~1023;
-    if (z->hdrBufSize > (80<<10) && z->hdrBufSize > 2 * size) {
-	free(z->hdrBuf);
-	return z->hdrBuf = malloc(z->hdrBufSize = size);
+    if (z->bufSize > (80<<10) && z->bufSize > 2 * size) {
+	free(z->buf);
+	return z->buf = malloc(z->bufSize = size);
     }
     // The existing buffer is okay.
-    return z->hdrBuf;
+    return z->buf;
 }
 
 ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2])

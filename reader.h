@@ -37,7 +37,7 @@ struct ops {
     int64_t (*opContentSize)(struct zpkglistReader *z);
     // Bulk reading, internal buffer.
     ssize_t (*opBulk)(struct zpkglistReader *z, void **bufp, const char *err[2]);
-    // Header reading, allocates z->hdrBuf.
+    // Header reading, allocates z->buf.
     ssize_t (*opNextMalloc)(struct zpkglistReader *z, int64_t *posp, const char *err[2]);
     // Seek to a position previously returned via posp.
     bool (*opSeek)(struct zpkglistReader *z, int64_t pos, const char *err[2]);
@@ -52,13 +52,13 @@ extern const struct ops
 // Read the uncompress byte stream.  Concatenates frames.
 ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
 
-// Generic opBulk implementation, uses someting like zread, fills z->bulkBuf.
+// Generic opBulk implementation, uses someting like zread, fills z->buf.
 ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]);
 
 // Generic implementation in terms of zread, without file position.
 ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2]);
 
-// Reallocate z->hdrBuf for opNextMalloc.
+// Reallocate z->buf for opNextMalloc.
 void *generic_opHdrBuf(struct zpkglistReader *z, size_t size);
 
 struct zpkglistReader {
@@ -66,16 +66,14 @@ struct zpkglistReader {
     char fdabuf[NREADA];
     const struct ops *ops;
     void *opState;
-    union {
-	void *bulkBuf;
-	void *readState;
-    };
+    void *readState;
     // Reading headers.
     char lead[16];
     bool hasLead;
     bool eof;
-    void *hdrBuf;
-    size_t hdrBufSize;
+    // A malloc'd buffer.
+    void *buf;
+    size_t bufSize;
 };
 
 #define CAT_(x, y) x ## y

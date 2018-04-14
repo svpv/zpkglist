@@ -140,9 +140,9 @@ static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const cha
     s->ix++;
     // Jumbo already malloc'd, otherwise pass down to generic allocator.
     if (jumbo) {
-	free(z->hdrBuf);
-	z->hdrBuf = blob;
-	z->hdrBufSize = 8 + dataSize;
+	free(z->buf);
+	z->buf = blob;
+	z->bufSize = 8 + dataSize;
     }
     else {
 	char *p = generic_opHdrBuf(z, 8 + dataSize);
