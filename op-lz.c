@@ -1,7 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "lz4reader.h"
 #include "zstdreader.h"
 #include "xzreader.h"
 
@@ -114,12 +113,8 @@ static ssize_t lz_opNextMalloc(struct zpkglistReader *z, int64_t *posp, const ch
     return ret;
 }
 
-// LZ4 and zstd support contentSize.
+// Zstd supports contentSize.
 #define CONTENTSIZE
-
-#define LZ lz4
-#include "op-lz-template.C"
-#undef LZ
 
 #define LZ zstd
 #include "op-lz-template.C"

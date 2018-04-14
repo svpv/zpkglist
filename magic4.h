@@ -2,7 +2,6 @@ enum magic4 {
     MAGIC4_UNKNOWN = -1,
     MAGIC4_RPMHEADER,
     MAGIC4_ZPKGLIST,
-    MAGIC4_LZ4,
     MAGIC4_ZSTD,
     MAGIC4_XZ,
 };
@@ -29,7 +28,6 @@ enum magic4 {
 #define MAGIC4_W_ZPKGLIST       MAGIC4LE(0x184d2a55)
 #define MAGIC4_W_ZPKGLIST_DICT  MAGIC4LE(0x184d2a56)
 #define MAGIC4_W_ZPKGLIST_FRAME MAGIC4LE(0x184d2a57)
-#define MAGIC4_W_LZ4            MAGIC4LE(0x184d2204)
 #define MAGIC4_W_ZSTD           MAGIC4LE(0xfd2fb528)
 #define MAGIC4_W_XZ             MAGIC4BE(0xfd377a58)
 
@@ -39,7 +37,6 @@ enum magic4 magic4(unsigned w)
     switch (w) {
     case MAGIC4_W_RPMHEADER: return MAGIC4_RPMHEADER;
     case MAGIC4_W_ZPKGLIST:  return MAGIC4_ZPKGLIST;
-    case MAGIC4_W_LZ4:       return MAGIC4_LZ4;
     case MAGIC4_W_ZSTD:      return MAGIC4_ZSTD;
     case MAGIC4_W_XZ:        return MAGIC4_XZ;
     }

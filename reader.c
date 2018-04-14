@@ -34,7 +34,6 @@ static const struct ops *allOps[] = {
     /* The same order as magic4. */
     &ops_rpmheader,
     &ops_zpkglist,
-    &ops_lz4,
     &ops_zstd,
     &ops_xz,
 };

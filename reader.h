@@ -46,7 +46,6 @@ struct ops {
 extern const struct ops
     ops_rpmheader,
     ops_zpkglist,
-    ops_lz4,
     ops_zstd,
     ops_xz;
 
