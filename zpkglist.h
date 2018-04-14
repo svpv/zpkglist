@@ -19,6 +19,7 @@
 // SOFTWARE.
 
 #pragma once
+#include <sys/types.h> // ssize_t
 
 #ifdef __cplusplus
 extern "C" {
