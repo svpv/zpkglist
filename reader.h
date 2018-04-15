@@ -73,6 +73,8 @@ struct zpkglistReader {
     unsigned lead[4];
     bool hasLead;
     bool eof;
+    // op-rpmheader.c
+    size_t left;
     // A malloc'd buffer.
     void *buf;
     size_t bufSize;
