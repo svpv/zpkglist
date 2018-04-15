@@ -26,7 +26,7 @@ union readState {
 
 static ssize_t OP(Bulk)(struct zpkglistReader *z, void **bufp, const char *err[2])
 {
-    ssize_t ret = zreader_getFrame(z->opState, bufp, NULL, false, err);
+    ssize_t ret = zreader_getFrame(z->reader, bufp, NULL, false, err);
     // Materialize the imlicit magic bytes.
     if (ret > 0)
 	ret += 8, *bufp -= 8;
@@ -70,23 +70,23 @@ static bool OP(Open)(struct zpkglistReader *z, const char *err[2])
     if (rc < 0)
 	return false;
     assert(rc > 0); // starts with the magic
-    return z->opState = zz, true;
+    return z->reader = zz, true;
 }
 
 static bool OP(Reopen)(struct zpkglistReader *z, const char *err[2])
 {
-    zreader_free(z->opState), z->opState = NULL;
+    zreader_free(z->reader), z->reader = NULL;
     return OP(Open)(z, err);
 }
 
 static void OP(Free)(struct zpkglistReader *z)
 {
-    zreader_free(z->opState);
+    zreader_free(z->reader);
 }
 
 static int64_t OP(ContentSize)(struct zpkglistReader *z)
 {
-    return zreader_contentSize(z->opState);
+    return zreader_contentSize(z->reader);
 }
 
 static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const char *err[2])
@@ -100,7 +100,7 @@ static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const cha
     bool jumbo = false;
     struct headerReadState *s = &((union readState *) z->readState)->h;
     if (s->cur == s->end) {
-	ssize_t ret = zreader_getFrame(z->opState, (void **) &s->cur, &s->pos, true, err);
+	ssize_t ret = zreader_getFrame(z->reader, (void **) &s->cur, &s->pos, true, err);
 	if (ret == 0 || ret == -1)
 	    return ret;
 	// Jumbo frame?

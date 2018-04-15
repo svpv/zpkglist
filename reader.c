@@ -113,7 +113,7 @@ static ssize_t zread1(struct zpkglistReader *z, void *buf, size_t size, const ch
 	if (ops == z->ops)
 	    rc = z->ops->opReopen(z, err);
 	else {
-	    z->ops->opFree(z), z->opState = NULL;
+	    z->ops->opFree(z), z->reader = NULL;
 	    z->ops = ops;
 	    rc = z->ops->opOpen(z, err);
 	}

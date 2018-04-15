@@ -15,12 +15,12 @@ static bool OP(Open)(struct zpkglistReader *z, const char *err[2])
     if (rc < 0)
 	return false;
     assert(rc > 0); // starts with the magic
-    return z->opState = LZ, true;
+    return z->reader = LZ, true;
 }
 
 static bool OP(Reopen)(struct zpkglistReader *z, const char *err[2])
 {
-    int rc = CALL(reopen)(z->opState, &z->fda, err);
+    int rc = CALL(reopen)(z->reader, &z->fda, err);
     if (rc < 0)
 	return false;
     assert(rc > 0); // starts with the magic
@@ -29,18 +29,18 @@ static bool OP(Reopen)(struct zpkglistReader *z, const char *err[2])
 
 static void OP(Free)(struct zpkglistReader *z)
 {
-    CALL(free)(z->opState);
+    CALL(free)(z->reader);
 }
 
 static ssize_t OP(Read)(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
 {
-    return CALL(read)(z->opState, buf, size, err);
+    return CALL(read)(z->reader, buf, size, err);
 }
 
 static int64_t OP(ContentSize)(struct zpkglistReader *z)
 {
 #ifdef CONTENTSIZE
-    return CALL(contentSize)(z->opState);
+    return CALL(contentSize)(z->reader);
 #endif
     return -1;
 }

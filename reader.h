@@ -62,10 +62,12 @@ ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2]);
 void *generic_opHdrBuf(struct zpkglistReader *z, size_t size);
 
 struct zpkglistReader {
+    // The underlying reader handle, e.g. xzreader.
+    void *reader;
+    // The input descriptor with readahead.
     struct fda fda;
     char fdabuf[NREADA];
     const struct ops *ops;
-    void *opState;
     void *readState;
     // Reading headers.
     unsigned lead[4];
