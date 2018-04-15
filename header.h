@@ -51,11 +51,10 @@ static const unsigned char headerMagic[8] = {
 #define headerCheckMagic(lead) (memcmp(lead, headerMagic, 8) == 0)
 
 // Returns the size of header's data after (il,dl).
-static inline ssize_t headerDataSize(char lead[16])
+static inline ssize_t headerDataSize(unsigned lead[4])
 {
-    unsigned *ei = (unsigned *) (lead + 8);
-    unsigned il = ntohl(ei[0]);
-    unsigned dl = ntohl(ei[1]);
+    unsigned il = ntohl(lead[2]);
+    unsigned dl = ntohl(lead[3]);
     // Check the limits, further do not permit zero values.
     if (il - 1 > headerMaxTags - 1) return -1;
     if (dl - 1 > headerMaxData - 1) return -1;

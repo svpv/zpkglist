@@ -41,7 +41,7 @@ static struct samples samples;
 
 static void load(void)
 {
-    char lead[16];
+    unsigned lead[4];
 
     // Peak at the first header.
     size_t ret = fread(lead, 1, 16, stdin);
@@ -64,7 +64,7 @@ static void load(void)
 	    // Put this header's leading bytes.
 	    // The very first magic won't be written.
 	    if (i == 0) {
-		memcpy(cur, lead + 8, 8);
+		memcpy(cur, lead + 2, 8);
 		cur += 8;
 	    }
 	    else {

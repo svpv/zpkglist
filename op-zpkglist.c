@@ -113,7 +113,9 @@ static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const cha
     }
     // The magic has been checked, s->cur points at <il,dl>.
     // There is at least 8 bytes, to the probe for <il,dl> is valid.
-    ssize_t dataSize = headerDataSize(s->cur - 8);
+    unsigned lead[4];
+    memcpy(lead + 2, s->cur, 8);
+    ssize_t dataSize = headerDataSize(lead);
     if (dataSize < 0 || 8 + dataSize > s->end - s->cur)
 	return ERRSTR("bad data size"), -1;
     void *blob = s->cur;

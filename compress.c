@@ -79,7 +79,7 @@ static bool zLoop(struct Z *z, struct stats *stats,
 		  void (*hash)(void *buf, size_t size, void *arg), void *arg)
 {
     // Load the leading bytes of the first header: 8 magic + 8 (il,dl).
-    char lead[16];
+    unsigned lead[4];
     ssize_t ret = zread(zin, lead, 16, err);
     // If it's EOF or an error, do nothing.
     if (ret <= 0)
@@ -118,7 +118,7 @@ static bool zLoop(struct Z *z, struct stats *stats,
 	    }
 
 	    // Fill the input buffer.
-	    memcpy(buf, lead + 8, 8);
+	    memcpy(buf, lead + 2, 8);
 	    ret = zread(zin, buf + 8, dataSize + 16, err);
 	    if (ret < 0)
 		return false;
@@ -216,7 +216,7 @@ static bool zLoop(struct Z *z, struct stats *stats,
 	    // Put this header's leading bytes.
 	    // The very first magic won't be written.
 	    if (i == 0) {
-		memcpy(cur, lead + 8, 8);
+		memcpy(cur, lead + 2, 8);
 		cur += 8;
 	    }
 	    else {

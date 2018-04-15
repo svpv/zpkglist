@@ -96,7 +96,7 @@ ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2])
     char *p = generic_opHdrBuf(z, allocSize);
     if (!p)
 	return ERRNO("malloc"), -1;
-    memcpy(p, z->lead + 8, 8);
+    memcpy(p, z->lead + 2, 8);
     if (!generic_opNextRead(z, p + 8, dataSize, err))
 	return -1;
     return 8 + dataSize;

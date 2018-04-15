@@ -68,7 +68,7 @@ struct zpkglistReader {
     void *opState;
     void *readState;
     // Reading headers.
-    char lead[16];
+    unsigned lead[4];
     bool hasLead;
     bool eof;
     // A malloc'd buffer.
