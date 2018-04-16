@@ -10,7 +10,8 @@ clean:
 SRC = reader.c zreader.c xzreader.c zstdreader.c reada.c \
       compress.c op-rpmheader.c op-zpkglist.c op-lz.c
 HDR = reader.h zreader.h xzreader.h zstdreader.h reada.h \
-      zpkglist.h error.h header.h magic4.h xwrite.h op-lz-template.C
+      zpkglist.h error.h header.h magic4.h xwrite.h \
+      train/rpmhdrzdict.h op-lz-template.C
 
 RPM_OPT_FLAGS ?= -O2 -g -Wall
 STD = -std=gnu11 -D_GNU_SOURCE
