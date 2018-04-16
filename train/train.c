@@ -49,7 +49,7 @@ static void load(void)
     assert(headerCheckMagic(lead));
 
     // The size of the header's data after (il,dl).
-    size_t dataSize = headerDataSize(lead);
+    ssize_t dataSize = headerDataSize(lead);
     assert(dataSize > 0);
 
     bool eof = false;

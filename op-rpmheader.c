@@ -72,7 +72,7 @@ static ssize_t OP(Bulk)(struct zpkglistReader *z, void **bufp, const char *err[2
 	memcpy(lead, z->fda.cur + grab, 16);
 	if (!headerCheckMagic(lead))
 	    return ERRSTR("bad header magic"), -1; // XXX eos
-	size_t dataSize = headerDataSize(lead);
+	ssize_t dataSize = headerDataSize(lead);
 	if (dataSize < 0)
 	    return ERRSTR("bad header size"), -1;
 	grab += 16 + dataSize;

@@ -14,10 +14,11 @@ HDR = reader.h zreader.h xzreader.h zstdreader.h reada.h \
       train/rpmhdrzdict.h op-lz-template.C
 
 RPM_OPT_FLAGS ?= -O2 -g -Wall
+WEXTRA = -Wextra -Wno-{sign-compare,missing-field-initializers,unused-parameter}
 STD = -std=gnu11 -D_GNU_SOURCE
 LFS = $(shell getconf LFS_CFLAGS)
 LTO = -flto
-COMPILE = $(CC) $(RPM_OPT_FLAGS) $(STD) $(LFS) $(LTO)
+COMPILE = $(CC) $(RPM_OPT_FLAGS) $(WEXTRA) $(STD) $(LFS) $(LTO)
 
 SHARED = -fpic -shared -Wl,-soname=$(SONAME) -Wl,--no-undefined
 LIBS = -llz4 -llzma -lzstd
