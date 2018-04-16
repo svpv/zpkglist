@@ -39,6 +39,8 @@ struct ops {
     ssize_t (*opBulk)(struct zpkglistReader *z, void **bufp, const char *err[2]);
     // Header reading, allocates z->buf.
     ssize_t (*opNextMalloc)(struct zpkglistReader *z, int64_t *posp, const char *err[2]);
+    // Header reading, internal buffer.
+    ssize_t (*opNextView)(struct zpkglistReader *z, void **blobp, int64_t *posp, const char *err[2]);
     // Seek to a position previously returned via posp.
     bool (*opSeek)(struct zpkglistReader *z, int64_t pos, const char *err[2]);
 };

@@ -102,6 +102,17 @@ static ssize_t lz_opNextMalloc(struct zpkglistReader *z, int64_t *posp, const ch
     return ret;
 }
 
+static ssize_t lz_opNextView(struct zpkglistReader *z, void **blobp, int64_t *posp, const char *err[2])
+{
+    ssize_t ret = generic_opNextMalloc(z, err);
+    if (ret > 0) {
+	if (posp)
+	    *posp = -1;
+	*blobp = z->buf;
+    }
+    return ret;
+}
+
 // Zstd supports contentSize.
 #define CONTENTSIZE
 

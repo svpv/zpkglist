@@ -189,10 +189,8 @@ ssize_t zpkglistNextMallocP(struct zpkglistReader *z, struct HeaderBlob ***blobp
 ssize_t zpkglistNextView(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2])
 {
-    ssize_t ret = z->ops->opNextMalloc(z, posp, err);
-    if (ret > 0)
-	*blobp = z->buf;
-    return ret;
+    // TODO: reallocate on a 4-byte boundary.
+    return z->ops->opNextView(z, (void **) blobp, posp, err);
 }
 
 int64_t zpkglistContentSize(struct zpkglistReader *z)

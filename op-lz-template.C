@@ -53,4 +53,5 @@ const struct ops OPS = {
     OP(ContentSize),
     generic_opBulk,
     lz_opNextMalloc,
+    lz_opNextView,
 };
