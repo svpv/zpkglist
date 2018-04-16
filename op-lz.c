@@ -40,16 +40,10 @@ static bool generic_opNextRead(struct zpkglistReader *z,
 	memcpy(z->lead, buf + dataSize, 16);
 	if (!headerCheckMagic(z->lead))
 	    return ERRSTR("bad header magic"), false;
-#ifdef __SSE2__
-	memset(buf + dataSize + 16, 0, 16);
-#endif
     }
     else if (ret == dataSize) {
 	z->eof = true;
 	memcpy(buf + dataSize, headerMagic, 8);
-#ifdef __SSE2__
-	memset(buf + dataSize + 8, 0, 24);
-#endif
     }
     else
 	return ERRSTR("unexpected EOF"), false;
@@ -90,9 +84,6 @@ ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2])
     if (dataSize <= 0)
 	return dataSize;
     size_t allocSize = 8 + dataSize + 16;
-#ifdef __SSE2__
-    allocSize += 16;
-#endif
     char *p = generic_opHdrBuf(z, allocSize);
     if (!p)
 	return ERRNO("malloc"), -1;
