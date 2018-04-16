@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Alexey Tourbin
+// Copyright (c) 2017, 2018 Alexey Tourbin
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,7 @@
 #include "zpkglist.h"
 #include "error.h"
 #include "xwrite.h"
+#include "header.h"
 
 #define PROG "zpkglist"
 #define warn(fmt, args...) fprintf(stderr, "%s: " fmt "\n", PROG, ##args)
@@ -38,6 +39,8 @@ enum {
     OPT_HELP = 256,
     OPT_QF,
     OPT_PRINTSIZE,
+    OPT_MALLOC,
+    OPT_VIEW,
 };
 
 static const struct option longopts[] = {
@@ -45,6 +48,8 @@ static const struct option longopts[] = {
     { "print-content-size", no_argument, NULL, OPT_PRINTSIZE },
     { "decompress", no_argument, NULL, 'd' },
     { "uncompress", no_argument, NULL, 'd' },
+    { "malloc", no_argument, NULL, OPT_MALLOC },
+    { "view", no_argument, NULL, OPT_VIEW },
     { "help", no_argument, NULL, OPT_HELP },
     { NULL },
 };
@@ -54,6 +59,7 @@ int main(int argc, char **argv)
     int c;
     bool usage = false;
     bool decode = false;
+    bool nextView = false, nextMalloc = false;
     bool printsize = false;
     const char *qf = NULL;
     while ((c = getopt_long(argc, argv, "d", longopts, NULL)) != -1) {
@@ -62,6 +68,12 @@ int main(int argc, char **argv)
 	    break;
 	case 'd':
 	    decode = true;
+	    break;
+	case OPT_MALLOC:
+	    decode = true, nextMalloc = true;
+	    break;
+	case OPT_VIEW:
+	    decode = true, nextView = true;
 	    break;
 	case OPT_QF:
 	    qf = optarg;
@@ -91,6 +103,8 @@ int main(int argc, char **argv)
 	    decode ? "binary" : "compressed");
     if (qf && printsize)
 	die("--qf=FMT and --print-content-size are mutually exclusive");
+    if (nextView && nextMalloc)
+	die("--view --and --malloc are mutually exclusive");
     posix_fadvise(0, 0, 0, POSIX_FADV_SEQUENTIAL);
     const char *func;
     const char *err[2];
@@ -135,6 +149,31 @@ int main(int argc, char **argv)
 		if (contentSize < 0)
 		    return 1; // unknown
 		printf("%" PRId64 "\n", contentSize);
+	    }
+	    else if (nextMalloc) {
+		struct HeaderBlob *blob;
+		func = "zpkglistNextMalloc";
+		while ((ret = zpkglistNextMalloc(z, &blob, NULL, err)) > 0) {
+		    bool ok = xwrite(1, headerMagic, 8) && xwrite(1, blob, ret);
+		    free(blob);
+		    if (!ok) {
+			func = "main";
+			ERRNO("write");
+			ret = -1;
+			break;
+		    }
+		}
+	    }
+	    else if (nextView) {
+		struct HeaderBlob *blob;
+		func = "zpkglistNextView";
+		while ((ret = zpkglistNextView(z, &blob, NULL, err)) > 0)
+		    if (!(xwrite(1, headerMagic, 8) && xwrite(1, blob, ret))) {
+			func = "main";
+			ERRNO("write");
+			ret = -1;
+			break;
+		    }
 	    }
 	    else {
 		void *buf;
