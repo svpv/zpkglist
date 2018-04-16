@@ -89,7 +89,8 @@ static int64_t OP(ContentSize)(struct zpkglistReader *z)
     return zreader_contentSize(z->reader);
 }
 
-static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const char *err[2])
+static ssize_t OP(NextHelper)(struct zpkglistReader *z, void **blobp, int64_t *posp,
+			      bool jumbo, const char *err[2])
 {
     if (!z->readState) {
 	z->readState = malloc(sizeof(union readState));
@@ -97,17 +98,23 @@ static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const cha
 	    return ERRNO("malloc"), -1;
 	memset(z->readState, 0, sizeof(union readState));
     }
-    bool jumbo = false;
     struct headerReadState *s = &((union readState *) z->readState)->h;
-    if (s->cur == s->end) {
-	ssize_t ret = zreader_getFrame(z->reader, (void **) &s->cur, &s->pos, true, err);
+    if (s->cur != s->end)
+	jumbo = false; // proceeding with the current frame
+    else {
+	ssize_t ret = zreader_getFrame(z->reader, (void **) &s->cur, &s->pos, jumbo, err);
 	if (ret == 0 || ret == -1)
 	    return ret;
 	// Jumbo frame?
 	if (ret < 0)
-	    ret = -ret, jumbo = true;
-	if (ret < 8)
+	    ret = -ret;
+	else
+	    jumbo = false;
+	if (ret < 8) {
+	    if (jumbo)
+		free(s->cur), s->cur = s->end = NULL;
 	    return ERRSTR("bad header size"), -1;
+	}
 	s->end = s->cur + ret;
 	s->ix = 0;
     }
@@ -140,19 +147,33 @@ static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const cha
     if (posp)
 	*posp = ((int64_t) s->pos << 2) + s->ix;
     s->ix++;
-    // Jumbo already malloc'd, otherwise pass down to generic allocator.
+    // Register jumbo malloc'd chunk.
     if (jumbo) {
 	free(z->buf);
 	z->buf = blob;
 	z->bufSize = 8 + dataSize;
     }
-    else {
-	char *p = generic_opHdrBuf(z, 8 + dataSize);
+    *blobp = blob;
+    return 8 + dataSize;
+}
+
+static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const char *err[2])
+{
+    void *blob;
+    ssize_t blobSize = OP(NextHelper)(z, &blob, posp, true, err);
+    // Jumbo already placed into z->buf, otherwise reallocate.
+    if (blobSize > 0 && blob != z->buf) {
+	void *p = generic_opHdrBuf(z, blobSize);
 	if (!p)
 	    return ERRNO("malloc"), -1;
-	memcpy(p, blob, 8 + dataSize);
+	memcpy(p, blob, blobSize);
     }
-    return 8 + dataSize;
+    return blobSize;
+}
+
+static ssize_t OP(NextView)(struct zpkglistReader *z, void **blobp, int64_t *posp, const char *err[2])
+{
+    return OP(NextHelper)(z, blobp, posp, false, err);
 }
 
 const struct ops OPS = {
@@ -163,4 +184,5 @@ const struct ops OPS = {
     OP(ContentSize),
     OP(Bulk),
     OP(NextMalloc),
+    OP(NextView),
 };
