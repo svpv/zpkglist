@@ -24,7 +24,47 @@ static void OP(Free)(struct zpkglistReader *z)
 
 static ssize_t OP(Read)(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
 {
-    return reada(&z->fda, buf, size);
+    ssize_t ret;
+    size_t total = 0;
+
+    // No bytes left on behalf of the current/last header?
+    // Peek at the next header, find out how many bytes can be slurped.
+    if (z->left == 0) {
+	unsigned lead[16];
+    peek:
+	ret = peeka(&z->fda, lead, 16);
+	if (ret < 0)
+	    return ERRNO("read"), -1;
+	if (ret == 0)
+	    return total;
+	if (ret < 16)
+	    return ERRSTR("unexpected EOF"), -1;
+	if (!headerCheckMagic(lead))
+	    return ERRSTR("bad header magic"), -1; // XXX eos
+	ssize_t dataSize = headerDataSize(lead);
+	if (dataSize < 0)
+	    return ERRSTR("bad header size"), -1;
+	z->left = 16 + dataSize;
+    }
+    if (size > z->left) {
+	// Can only read z->left.
+	ret = reada(&z->fda, buf, z->left);
+	if (ret < 0)
+	    return ERRNO("read"), -1;
+	if (ret != z->left)
+	    return ERRSTR("unexpected EOF"), -1;
+	buf = (char *) buf + ret, size -= ret, total += ret;
+	z->left = 0;
+	goto peek;
+    }
+    // Can serve the whole size.
+    ret = reada(&z->fda, buf, size);
+    if (ret < 0)
+	return ERRNO("read"), -1;
+    if (ret != size)
+	return ERRSTR("unexpected EOF"), -1;
+    z->left -= size;
+    return total + size;
 }
 
 static int64_t OP(ContentSize)(struct zpkglistReader *z)
