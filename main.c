@@ -103,8 +103,6 @@ int main(int argc, char **argv)
 	    decode ? "binary" : "compressed");
     if (qf && printsize)
 	die("--qf=FMT and --print-content-size are mutually exclusive");
-    if (nextView && nextMalloc)
-	die("--view --and --malloc are mutually exclusive");
     posix_fadvise(0, 0, 0, POSIX_FADV_SEQUENTIAL);
     const char *func;
     const char *err[2];
@@ -149,6 +147,29 @@ int main(int argc, char **argv)
 		if (contentSize < 0)
 		    return 1; // unknown
 		printf("%" PRId64 "\n", contentSize);
+	    }
+	    else if (nextMalloc && nextView) {
+		struct HeaderBlob *blob;
+		func = "zpkglistNextMalloc";
+		for (unsigned i = 0; ; i++) {
+		    if (i % 2)
+			func = "zpkglistNextMalloc",
+			ret  =  zpkglistNextMalloc(z, &blob, NULL, err);
+		    else
+			func = "zpkglistNextView",
+			ret  =  zpkglistNextView(z, &blob, NULL, err);
+		    if (ret <= 0)
+			break;
+		    bool ok = xwrite(1, headerMagic, 8) && xwrite(1, blob, ret);
+		    if (i % 2)
+			free(blob);
+		    if (!ok) {
+			func = "main";
+			ERRNO("write");
+			ret = -1;
+			break;
+		    }
+		}
 	    }
 	    else if (nextMalloc) {
 		struct HeaderBlob *blob;
