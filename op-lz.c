@@ -30,48 +30,6 @@ static ssize_t lz_opBulk(struct zpkglistReader *z, void **bufp, const char *err[
     return n;
 }
 
-static ssize_t generic_opNextSize(struct zpkglistReader *z, const char *err[2])
-{
-    if (z->eof)
-	return 0;
-    if (!z->hasLead) {
-	ssize_t ret = zread(z, z->lead, 16, err);
-	if (ret < 0)
-	    return -1;
-	if (ret == 0) {
-	    z->eof = true;
-	    return 0;
-	}
-	if (ret < 16)
-	    return ERRSTR("unexpected EOF"), -1;
-	if (!headerCheckMagic(z->lead))
-	    return ERRSTR("bad header magic"), -1;
-	z->hasLead = true;
-    }
-    ssize_t dataSize = headerDataSize(z->lead);
-    if (dataSize < 0)
-	return ERRSTR("bad header size"), -1;
-    return dataSize;
-}
-
-static bool generic_opNextRead(struct zpkglistReader *z,
-	char *buf, size_t dataSize, const char *err[2])
-{
-    ssize_t ret = zread(z, buf, dataSize + 16, err);
-    if (ret == dataSize + 16) {
-	memcpy(z->lead, buf + dataSize, 16);
-	if (!headerCheckMagic(z->lead))
-	    return ERRSTR("bad header magic"), false;
-    }
-    else if (ret == dataSize) {
-	z->eof = true;
-	memcpy(buf + dataSize, headerMagic, 8);
-    }
-    else
-	return ERRSTR("unexpected EOF"), false;
-    return true;
-}
-
 // Reallocate z->buf for opNextMalloc.
 void *generic_opHdrBuf(struct zpkglistReader *z, size_t size)
 {
@@ -101,38 +59,53 @@ void *generic_opHdrBuf(struct zpkglistReader *z, size_t size)
     return z->buf;
 }
 
-ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2])
-{
-    ssize_t dataSize = generic_opNextSize(z, err);
-    if (dataSize <= 0)
-	return dataSize;
-    size_t allocSize = 8 + dataSize + 16;
-    char *p = generic_opHdrBuf(z, allocSize);
-    if (!p)
-	return ERRNO("malloc"), -1;
-    memcpy(p, z->lead + 2, 8);
-    if (!generic_opNextRead(z, p + 8, dataSize, err))
-	return -1;
-    return 8 + dataSize;
-}
-
 static ssize_t lz_opNextMalloc(struct zpkglistReader *z, int64_t *posp, const char *err[2])
 {
-    ssize_t ret = generic_opNextMalloc(z, err);
+    if (!z->hasLead) {
+	ssize_t ret = z->ops->opRead(z, z->lead, 16, err);
+	if (ret <= 0)
+	    return ret;
+	if (ret < 16)
+	    return ERRSTR("unexpected EOF"), -1;
+	if (!headerCheckMagic(z->lead))
+	    return ERRSTR("bad header magic"), -1;
+	z->hasLead = true;
+    }
+    ssize_t dataSize = headerDataSize(z->lead);
+    if (dataSize < 0)
+	return ERRSTR("bad header size"), -1;
+
+    char *buf = generic_opHdrBuf(z, 8 + dataSize + 16);
+    if (!buf)
+	return ERRNO("malloc"), -1;
+
+    memcpy(buf, z->lead + 2, 8);
+
+    ssize_t ret = z->ops->opRead(z, buf + 8, dataSize + 16, err);
+    if (ret == dataSize + 16) {
+	memcpy(z->lead, buf + 8 + dataSize, 16);
+	if (!headerCheckMagic(z->lead))
+	    return ERRSTR("bad header magic"), -1;
+    }
+    else if (ret == dataSize) {
+	z->hasLead = false;
+	// Re-add the trailing 16 bytes characteristic of op-lz.c chunks.
+	memcpy(buf + 8 + dataSize, z->lead, 16);
+    }
+    else
+	return ERRSTR("unexpected EOF"), -1;
+
     // File position not supported.  Cannot get back, at least.
-    if (ret > 0 && posp)
+    if (posp)
 	*posp = -1;
-    return ret;
+    return 8 + dataSize;
 }
 
 static ssize_t lz_opNextView(struct zpkglistReader *z, void **blobp, int64_t *posp, const char *err[2])
 {
-    ssize_t ret = generic_opNextMalloc(z, err);
-    if (ret > 0) {
-	if (posp)
-	    *posp = -1;
+    ssize_t ret = lz_opNextMalloc(z, posp, err);
+    if (ret > 0)
 	*blobp = z->buf;
-    }
     return ret;
 }
 
