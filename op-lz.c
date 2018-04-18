@@ -8,6 +8,28 @@
 #include "header.h"
 #include "reader.h"
 
+static ssize_t lz_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
+{
+    // Zstd compresses data in 128K blocks.
+    size_t bulkSize = 128 << 10;
+    if (!z->buf)
+	z->buf = malloc(z->bufSize = bulkSize);
+    else if (z->bufSize < bulkSize) {
+	free(z->buf);
+	z->buf = malloc(z->bufSize = bulkSize);
+    }
+    if (!z->buf)
+	return ERRNO("malloc"), -1;
+
+    // Check against header reading.
+    assert(!z->hasLead);
+
+    ssize_t n = z->ops->opRead(z, z->buf, bulkSize, err);
+    if (n > 0)
+	*bufp = z->buf;
+    return n;
+}
+
 static ssize_t generic_opNextSize(struct zpkglistReader *z, const char *err[2])
 {
     if (z->eof)
@@ -70,7 +92,8 @@ void *generic_opHdrBuf(struct zpkglistReader *z, size_t size)
     // For bloated headers with changelogs, we have the following quantiles:
     // 75% - 7K, 90% - 16K, 95% - 26K, 99% - 79K.
     size = (size + 16384) & ~1023;
-    if (z->bufSize > (80<<10) && z->bufSize > 2 * size) {
+    // Anyway, lz_opBulk allocates 128K, so don't shrink below 128K.
+    if (z->bufSize > (128<<10) && z->bufSize > 2 * size) {
 	free(z->buf);
 	return z->buf = malloc(z->bufSize = size);
     }

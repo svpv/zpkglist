@@ -54,9 +54,6 @@ extern const struct ops
 // Read the uncompress byte stream.  Concatenates frames.
 ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
 
-// Generic opBulk implementation, uses someting like zread, fills z->buf.
-ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2]);
-
 // Generic implementation in terms of zread, without file position.
 ssize_t generic_opNextMalloc(struct zpkglistReader *z, const char *err[2]);
 

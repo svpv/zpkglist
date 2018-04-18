@@ -139,30 +139,6 @@ ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[
     return total;
 }
 
-ssize_t generic_opBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
-{
-    // Zstd compresses data in 128K blocks.
-    size_t bulkSize = 128 << 10;
-    // Reading headers and bulk reading are mutually exclusive.
-    // There's no good reason why the size of the buffer can change.
-    if (z->buf)
-	assert(z->bufSize == bulkSize);
-    else {
-	z->buf = malloc(bulkSize);
-	if (!z->buf)
-	    return ERRNO("malloc"), -1;
-	z->bufSize = bulkSize;
-    }
-
-    // Another check against header reading.
-    assert(!z->hasLead);
-
-    ssize_t n = zread1(z, z->buf, bulkSize, err);
-    if (n > 0)
-	*bufp = z->buf;
-    return n;
-}
-
 ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
 {
     return z->ops->opBulk(z, bufp, err);

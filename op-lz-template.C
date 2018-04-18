@@ -20,6 +20,7 @@ static bool OP(Open)(struct zpkglistReader *z, const char *err[2])
     if (rc < 0)
 	return false;
     assert(rc > 0); // starts with the magic
+    z->hasLead = false;
     return z->reader = LZ, true;
 }
 
@@ -29,6 +30,7 @@ static bool OP(Reopen)(struct zpkglistReader *z, const char *err[2])
     if (rc < 0)
 	return false;
     assert(rc > 0); // starts with the magic
+    z->hasLead = false;
     return true;
 }
 
@@ -81,7 +83,7 @@ const struct ops OPS = {
     OP(Free),
     OP(Read),
     OP(ContentSize),
-    generic_opBulk,
+    lz_opBulk,
     lz_opNextMalloc,
     lz_opNextView,
 };
