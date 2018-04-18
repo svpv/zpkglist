@@ -6,6 +6,11 @@
 #define CALL(method) CAT3(LZREADER, _, method)
 #define OPS CAT2(ops_, LZ)
 
+#include "magic4.h"
+#define MAGIC4_W_xz MAGIC4_W_XZ
+#define MAGIC4_W_zstd MAGIC4_W_ZSTD
+#define MAGIC4_W_LZ CAT2(MAGIC4_W_, LZ)
+
 #endif
 
 static bool OP(Open)(struct zpkglistReader *z, const char *err[2])
@@ -34,7 +39,32 @@ static void OP(Free)(struct zpkglistReader *z)
 
 static ssize_t OP(Read)(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
 {
-    return CALL(read)(z->reader, buf, size, err);
+    size_t total = 0;
+    while (1) {
+	ssize_t n = CALL(read)(z->reader, buf, size, err);
+	if (n < 0)
+	    return -1;
+	total += n;
+	if (n == size)
+	    return total;
+	assert(n < size);
+	buf = (char *) buf + n, size -= n;
+	// Got n < size, trying to concatenate.
+	unsigned w;
+	ssize_t ret = peeka(&z->fda, &w, 4);
+	if (ret < 0)
+	    return ERRNO("read"), -1;
+	if (ret == 0)
+	    return total;
+	if (ret != 4)
+	    return ERRSTR("unexpected EOF"), -1;
+	if (w != MAGIC4_W_LZ) // The caller can recognize end-of-stream, because
+	    return total;     // the number of bytes read is less than requested.
+	int rc = CALL(reopen)(z->reader, &z->fda, err);
+	if (rc < 0)
+	    return -1;
+	assert(rc > 0);
+    }
 }
 
 static int64_t OP(ContentSize)(struct zpkglistReader *z)
