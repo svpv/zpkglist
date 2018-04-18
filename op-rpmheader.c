@@ -9,12 +9,14 @@
 static bool OP(Open)(struct zpkglistReader *z, const char *err[2])
 {
     z->left = 0;
+    z->hasLead = false;
     return true;
 }
 
 static bool OP(Reopen)(struct zpkglistReader *z, const char *err[2])
 {
     z->left = 0;
+    z->hasLead = false;
     return true;
 }
 
@@ -140,6 +142,80 @@ static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const cha
     return ret;
 }
 
+static ssize_t OP(NextView)(struct zpkglistReader *z, void **bufp, int64_t *posp, const char *err[2])
+{
+    if (!z->hasLead) {
+	ssize_t ret = peeka(&z->fda, z->lead, 16);
+	if (ret < 0)
+	    return ERRNO("read"), -1;
+	if (ret == 0)
+	    return 0;
+	if (ret < 16)
+	    return ERRSTR("unexpected EOF"), -1;
+	if (!headerCheckMagic(z->lead))
+	    return ERRSTR("bad header magic"), -1; // XXX eos
+	z->hasLead = true;
+	// Only skip magic, keep <il,dl>.
+	z->fda.cur += 8;
+    }
+    ssize_t dataSize = headerDataSize(z->lead);
+    if (dataSize < 0)
+	return ERRSTR("bad header size"), -1;
+
+    // Going to return this:
+    void *buf;
+    size_t blobSize = 8 + dataSize;
+    off_t pos = tella(&z->fda) - 8;
+
+    // Gonna peek at the next header, this will be the result of peeka.
+    ssize_t ret;
+
+    // Does the blob fit into the fda buffer, along with 16 more bytes
+    // of the next blob to peek at?  If it doesn't, resort to malloc.
+    if (blobSize + 16 > maxfilla(&z->fda)) {
+	buf = generic_opHdrBuf(z, blobSize);
+	if (!buf)
+	    return ERRNO("malloc"), -1;
+	ret = reada(&z->fda, buf, blobSize);
+	if (ret < 0)
+	    return ERRNO("read"), -1;
+	if (ret != blobSize)
+	    return ERRSTR("unexpected EOF"), -1;
+	ret = peeka(&z->fda, z->lead, 16);
+	if (ret < 0)
+	    return ERRNO("read"), -1;
+    }
+    else {
+	ret = filla(&z->fda, blobSize + 16);
+	if (ret < 0)
+	    return ERRNO("read"), -1;
+	if (ret < blobSize)
+	    return ERRSTR("unexpected EOF"), -1;
+	// Take the internal region, as if by reada().
+	buf = z->fda.cur;
+	z->fda.cur += blobSize;
+	// Simulate peeka().
+	ret -= blobSize;
+	memcpy(z->lead, z->fda.cur, ret);
+    }
+
+    // Deal with what's next.
+    if (ret == 0)
+	z->hasLead = false;
+    else {
+	if (ret < 16)
+	    return ERRSTR("unexpected EOF"), -1;
+	if (!headerCheckMagic(z->lead))
+	    return ERRSTR("bad header magic"), -1; // XXX eos
+	z->fda.cur += 8;
+    }
+
+    *bufp = buf;
+    if (posp)
+	*posp = pos;
+    return blobSize;
+}
+
 const struct ops OPS = {
     OP(Open),
     OP(Reopen),
@@ -148,4 +224,5 @@ const struct ops OPS = {
     OP(ContentSize),
     OP(Bulk),
     OP(NextMalloc),
+    OP(NextView),
 };
