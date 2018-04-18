@@ -135,11 +135,52 @@ static ssize_t OP(Bulk)(struct zpkglistReader *z, void **bufp, const char *err[2
 
 static ssize_t OP(NextMalloc)(struct zpkglistReader *z, int64_t *posp, const char *err[2])
 {
-    off_t pos = tella(&z->fda) - 16 * z->hasLead;
-    ssize_t ret = generic_opNextMalloc(z, err);
-    if (ret > 0 && posp)
+    if (!z->hasLead) {
+	ssize_t ret = peeka(&z->fda, z->lead, 16);
+	if (ret < 0)
+	    return ERRNO("read"), -1;
+	if (ret == 0)
+	    return 0;
+	if (ret < 16)
+	    return ERRSTR("unexpected EOF"), -1;
+	if (!headerCheckMagic(z->lead))
+	    return ERRSTR("bad header magic"), -1; // XXX eos
+	z->hasLead = true;
+	// Only skip magic, keep <il,dl>.
+	z->fda.cur += 8;
+    }
+    ssize_t dataSize = headerDataSize(z->lead);
+    if (dataSize < 0)
+	return ERRSTR("bad header size"), -1;
+    size_t blobSize = 8 + dataSize;
+    off_t pos = tella(&z->fda) - 8;
+
+    void *buf = generic_opHdrBuf(z, blobSize);
+    if (!buf)
+	return ERRNO("malloc"), -1;
+    ssize_t ret = reada(&z->fda, buf, blobSize);
+    if (ret < 0)
+	return ERRNO("read"), -1;
+    if (ret != blobSize)
+	return ERRSTR("unexpected EOF"), -1;
+
+    // Deal with what's next.
+    ret = peeka(&z->fda, z->lead, 16);
+    if (ret < 0)
+	return ERRNO("read"), -1;
+    if (ret == 0)
+	z->hasLead = false;
+    else {
+	if (ret < 16)
+	    return ERRSTR("unexpected EOF"), -1;
+	if (!headerCheckMagic(z->lead))
+	    return ERRSTR("bad header magic"), -1; // XXX eos
+	z->fda.cur += 8;
+    }
+
+    if (posp)
 	*posp = pos;
-    return ret;
+    return blobSize;
 }
 
 static ssize_t OP(NextView)(struct zpkglistReader *z, void **bufp, int64_t *posp, const char *err[2])
