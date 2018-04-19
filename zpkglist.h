@@ -51,6 +51,16 @@ void zpkglistFree(struct zpkglistReader *z);
 // Combines free + close.
 void zpkglistClose(struct zpkglistReader *z);
 
+// Read the uncompressed byte stream.  Returns the number of bytes read,
+// 0 on EOF, -1 on error.  Concatenates frames.  Uncompressed data is not
+// validated.  The number of bytes read can be less than requested due to
+// a frame boundary (or EOF).  Such a frame boundary should match the header
+// boundary, which is up to the caller to check.  As a special case,
+// zstd+zstd and xz+xz streams are always concatenated transparently,
+// without exposing the boundary.
+ssize_t zpkglistRead(struct zpkglistReader *z, void *buf, size_t size,
+		     const char *err[2]) __attribute__((nonnull));
+
 // Bulk reading of uncompressed data into the internal buffer,
 // e.g. for checksumming, with optimal buffer management.
 // Returns the number of bytes read, 0 on EOF, -1 on error.

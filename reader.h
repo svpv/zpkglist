@@ -51,9 +51,6 @@ extern const struct ops
     ops_zstd,
     ops_xz;
 
-// Read the uncompress byte stream.  Concatenates frames.
-ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);
-
 // Reallocate z->buf for opNextMalloc.
 void *generic_opHdrBuf(struct zpkglistReader *z, size_t size);
 

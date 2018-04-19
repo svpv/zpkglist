@@ -30,7 +30,6 @@
 #include "zpkglist.h"
 #include "error.h"
 #include "xwrite.h"
-#include "reader.h" // zread
 #include "header.h"
 
 struct Z {
@@ -80,7 +79,7 @@ static bool zLoop(struct Z *z, struct stats *stats,
 {
     // Load the leading bytes of the first header: 8 magic + 8 (il,dl).
     unsigned lead[4];
-    ssize_t ret = zread(zin, lead, 16, err);
+    ssize_t ret = zpkglistRead(zin, lead, 16, err);
     // If it's EOF or an error, do nothing.
     if (ret <= 0)
 	return ret == 0;
@@ -119,7 +118,7 @@ static bool zLoop(struct Z *z, struct stats *stats,
 
 	    // Fill the input buffer.
 	    memcpy(buf, lead + 2, 8);
-	    ret = zread(zin, buf + 8, dataSize + 16, err);
+	    ret = zpkglistRead(zin, buf + 8, dataSize + 16, err);
 	    if (ret < 0)
 		return false;
 
@@ -194,8 +193,18 @@ static bool zLoop(struct Z *z, struct stats *stats,
 	    if (stats->jbufsize < 8 + dataSize)
 		stats->jbufsize = 8 + dataSize;
 
-	    if (eof)
-		return true;
+	    // Concatenate the next frame?
+	    if (eof) {
+		ret = zpkglistRead(zin, lead, 16, err);
+		if (ret < 0)
+		    return false;
+		if (ret == 0)
+		    return true; // true EOF
+		if (ret < 16)
+		    return ERRSTR("unexpected EOF"), false;
+		if (!headerCheckMagic(lead))
+		    return ERRSTR("bad header magic"), false;
+	    }
 
 	    // The next header is for the next iteration.
 	    dataSize = headerDataSize(lead);
@@ -226,19 +235,31 @@ static bool zLoop(struct Z *z, struct stats *stats,
 	    }
 
 	    // Read this header's data + the next header's leading bytes.
-	    ret = zread(zin, cur, dataSize + 16, err);
+	    ret = zpkglistRead(zin, cur, dataSize + 16, err);
 	    if (ret < 0)
 		return false;
 	    cur += dataSize;
+	    // Concatenate the next frame?
 	    if (ret == dataSize) {
-		eof = true;
-		break;
+		// No need to append, read directly into lead[].
+		ret = zpkglistRead(zin, lead, 16, err);
+		if (ret < 0)
+		    return false;
+		if (ret == 0) {
+		    eof = true; // true EOF
+		    break;
+		}
+		if (ret < 16)
+		    return ERRSTR("unexpected EOF"), false;
+		if (!headerCheckMagic(lead))
+		    return ERRSTR("bad header magic"), false;
 	    }
-	    if (ret != dataSize + 16)
+	    else if (ret == dataSize + 16)
+		// Save the next header's leading bytes for the next iteration.
+		memcpy(lead, cur, 16);
+	    else
 		return ERRSTR("unexpected EOF"), false;
 
-	    // Save the next header's leading bytes for the next iteration.
-	    memcpy(lead, cur, 16);
 	    // Verify the next header's magic - otherwise, we aren't even sure
 	    // we got the right size.
 	    if (!headerCheckMagic(lead))

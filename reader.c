@@ -99,74 +99,64 @@ void zpkglistClose(struct zpkglistReader *z)
     zpkglistFree(z);
 }
 
-static ssize_t zread1(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
+static int zpkglistConcat(struct zpkglistReader *z, const char *err[2])
 {
-    while (1) {
-	ssize_t n = z->ops->opRead(z, buf, size, err);
-	if (n)
-	    return n;
+    z->ops->opFree(z), z->reader = NULL;
 
-	const struct ops *ops;
-	int rc = zpkglistBegin(&z->fda, &ops, err);
-	if (rc <= 0)
-	    return rc;
-	if (ops == z->ops)
-	    rc = z->ops->opReopen(z, err);
-	else {
-	    z->ops->opFree(z), z->reader = NULL;
-	    z->ops = ops;
-	    rc = z->ops->opOpen(z, err);
-	}
-	if (rc < 0)
-	    return rc;
-	assert(rc > 0);
-    }
+    int rc = zpkglistBegin(&z->fda, &z->ops, err);
+    if (rc <= 0)
+	return rc;
+    return z->ops->opOpen(z, err);
 }
 
-ssize_t zread(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
+#define ConcatRead(n, opReadCall)		\
+    ssize_t n;					\
+    do {					\
+	n = z->ops->opReadCall;			\
+	if (n > 0)				\
+	    break;				\
+	if (n < 0)				\
+	    return -1;				\
+	int rc = zpkglistConcat(z, err);	\
+	if (rc <= 0)				\
+	    return rc;				\
+    } while (1)
+
+ssize_t zpkglistRead(struct zpkglistReader *z, void *buf, size_t size, const char *err[2])
 {
-    assert(size > 0);
-    size_t total = 0;
-    do {
-	ssize_t n = zread1(z, buf, size, err);
-	if (n < 0)
-	    return -1;
-	if (n == 0)
-	    break;
-	size -= n, buf = (char *) buf + n;
-	total += n;
-    } while (size);
-    return total;
+    // Backends assert that size > 0.
+    ConcatRead(n, opRead(z, buf, size, err));
+    return n;
 }
 
 ssize_t zpkglistBulk(struct zpkglistReader *z, void **bufp, const char *err[2])
 {
-    return z->ops->opBulk(z, bufp, err);
+    ConcatRead(n, opBulk(z, bufp, err));
+    return n;
 }
 
 ssize_t zpkglistNextMalloc(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2])
 {
-    ssize_t ret = z->ops->opNextMalloc(z, posp, err);
-    if (ret > 0)
-	*blobp = z->buf, z->buf = NULL;
-    return ret;
+    ConcatRead(n, opNextMalloc(z, posp, err));
+    *blobp = z->buf, z->buf = NULL;
+    return n;
 }
 
 ssize_t zpkglistNextMallocP(struct zpkglistReader *z, struct HeaderBlob ***blobpp,
 	int64_t *posp, const char *err[2])
 {
-    ssize_t ret = z->ops->opNextMalloc(z, posp, err);
-    if (ret > 0)
-	*blobpp = (void *) &z->buf;
-    return ret;
+    ConcatRead(n, opNextMalloc(z, posp, err));
+    *blobpp = (void *) &z->buf;
+    return n;
 }
 
 ssize_t zpkglistNextView(struct zpkglistReader *z, struct HeaderBlob **blobp,
 	int64_t *posp, const char *err[2])
 {
+    ConcatRead(n, opNextView(z, (void **) blobp, posp, err));
     // TODO: reallocate on a 4-byte boundary.
-    return z->ops->opNextView(z, (void **) blobp, posp, err);
+    return n;
 }
 
 int64_t zpkglistContentSize(struct zpkglistReader *z)
