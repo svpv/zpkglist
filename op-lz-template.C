@@ -24,16 +24,6 @@ static bool OP(Open)(struct zpkglistReader *z, const char *err[2])
     return z->reader = LZ, true;
 }
 
-static bool OP(Reopen)(struct zpkglistReader *z, const char *err[2])
-{
-    int rc = CALL(reopen)(z->reader, &z->fda, err);
-    if (rc < 0)
-	return false;
-    assert(rc > 0); // starts with the magic
-    z->hasLead = false;
-    return true;
-}
-
 static void OP(Free)(struct zpkglistReader *z)
 {
     CALL(free)(z->reader);
@@ -79,7 +69,6 @@ static int64_t OP(ContentSize)(struct zpkglistReader *z)
 
 const struct ops OPS = {
     OP(Open),
-    OP(Reopen),
     OP(Free),
     OP(Read),
     OP(ContentSize),

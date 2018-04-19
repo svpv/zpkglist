@@ -29,7 +29,6 @@ struct zpkglistReader;
 struct ops {
     // Creating stream.
     bool (*opOpen)(struct zpkglistReader *z, const char *err[2]);
-    bool (*opReopen)(struct zpkglistReader *z, const char *err[2]);
     void (*opFree)(struct zpkglistReader *z);
     // Basic reading.
     ssize_t (*opRead)(struct zpkglistReader *z, void *buf, size_t size, const char *err[2]);

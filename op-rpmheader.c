@@ -13,13 +13,6 @@ static bool OP(Open)(struct zpkglistReader *z, const char *err[2])
     return true;
 }
 
-static bool OP(Reopen)(struct zpkglistReader *z, const char *err[2])
-{
-    z->left = 0;
-    z->hasLead = false;
-    return true;
-}
-
 static void OP(Free)(struct zpkglistReader *z)
 {
 }
@@ -259,7 +252,6 @@ static ssize_t OP(NextView)(struct zpkglistReader *z, void **bufp, int64_t *posp
 
 const struct ops OPS = {
     OP(Open),
-    OP(Reopen),
     OP(Free),
     OP(Read),
     OP(ContentSize),
