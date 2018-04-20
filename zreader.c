@@ -46,86 +46,113 @@ struct zreader {
 
 static int zreader_begin(struct zreader *z, const char *err[2])
 {
-    unsigned w[4];
-    // Read <magic,size> + contentSize.
-    ssize_t ret = reada(z->fda, w, sizeof w);
+    // Read the leading frame.
+    struct {
+	unsigned magic;
+	unsigned size16;
+	uint64_t total;
+	unsigned buf1size;
+	unsigned jbufsize;
+    } frame0;
+    ssize_t ret = reada(z->fda, &frame0, sizeof frame0);
     if (ret < 0)
 	return ERRNO("read"), -1;
     if (ret == 0)
 	return 0;
-    if (ret < sizeof w)
+    if (ret != sizeof frame0)
 	return ERRSTR("unexpected EOF"), -1;
-    if (w[0] != MAGIC4_W_ZPKGLIST)
+    if (frame0.magic != MAGIC4_W_ZPKGLIST)
 	return ERRSTR("bad zpkglist magic"), -1;
-    if (w[1] != htole32(16))
+    if (frame0.size16 != htole32(16))
 	return ERRSTR("bad zpkglist frame size"), -1;
-    if (w[3])
-	return ERRSTR("contentSize too big"), -1;
-    z->contentSize = le32toh(w[2]);
-    // Read <buf1size,jbufsize> + the dictionary frame header.
-    ret = reada(z->fda, w, sizeof w);
+    z->buf1size = le32toh(frame0.buf1size);
+    z->jbufsize = le32toh(frame0.jbufsize);
+    z->contentSize = le64toh(frame0.total);
+
+    // Validate the sizes:
+    // contentSize and buf1size must be either both zero or both non-zero.
+    if (!z->buf1size ^ !z->contentSize)
+	return ERRSTR("bad buf1size"), -1;
+    // If there are jumbo frames:
+    if (z->jbufsize) {
+	// buf1size must also be non-zero.
+	if (!z->buf1size)
+	    return ERRSTR("bad buf1size"), -1;
+	// Jumbo frames cannot exceed header limits.
+	// Or contentSize limits, for that matter.
+	if (z->jbufsize > headerMaxSize ||
+	    z->jbufsize > z->contentSize)
+	    return ERRSTR("bad jbufsize"), -1;
+	// They cannot be too small either.
+	if (z->jbufsize <= (128<<10))
+	    return ERRSTR("bad jbufsize"), -1;
+    }
+    // buf1size cannot be too big.
+    if (z->buf1size > (128<<10) + LZ4_COMPRESSBOUND(128<<10) &&
+	z->buf1size > LZ4_COMPRESSBOUND(z->jbufsize))
+	return ERRSTR("bad buf1size"), -1;
+
+    // Peek at the dictionary frame.
+    unsigned w[2];
+    ret = peeka(z->fda, w, sizeof w);
     if (ret < 0)
 	return ERRNO("read"), -1;
-    // When contentSize=0, permit a truncated frame without <buf1size,jbufsize>.
-    if (ret == 0 || ret == 8) {
-	if (z->contentSize)
+    // Do we have a dictionary magic?
+    if (ret < 4 || w[0] != MAGIC4_W_ZPKGLIST_DICT) {
+	// No dictionary magic, no content?
+	// Cannot just return 0, which would indicate physical EOF.
+	// Since there is a valid frame, return an EOF object.
+	if (z->contentSize == 0)
+	    return z->eof = true, 1;
+	if (ret < 4)
 	    return ERRSTR("unexpected EOF"), -1;
-	return 0;
+	return ERRSTR("bad dictionary magic"), -1;
     }
+    // There is a dictionary magic.  If the contentSize is 0, this means that
+    // the file wasn't written properly (the leading frame wasn't overwritten).
+    if (z->contentSize == 0)
+	return ERRSTR("unexpected dictionary after blank frame"), -1;
+    // Partial dictionary frame header?  No pasaran.
     if (ret != sizeof w)
 	return ERRSTR("unexpected EOF"), -1;
-    // Peek at the dictionary frame.
-    if (w[2] != MAGIC4_W_ZPKGLIST_DICT)
-	return ERRSTR("bad dictionary magic"), -1;
-    size_t zsize = le32toh(w[3]);
+    // Taking it, as if with reada().
+    z->fda->cur += sizeof w;
+
+    // Got the compressed dictionary size.
+    size_t zsize = le32toh(w[1]);
     // LZ4 maxiumum compression ratio is 255, therfore assume that
     // the compressed size of a 64K dictionary cannot go below 257 bytes.
     if (zsize < 257 || zsize > LZ4_COMPRESSBOUND(64<<10))
 	return ERRSTR("bad dictionary zsize"), -1;
-    // Verify <buf1size,jbufsize>.
-    z->buf1size = htole32(w[0]);
     // The buffer will be used to read the compressed dictionary.
     if (z->buf1size < zsize)
-	return ERRSTR("bad buf1size"), -1;
-    z->jbufsize = htole32(w[1]);
-    // Jumbo frames cannot exceed header limits.
-    if (z->jbufsize > headerMaxSize)
-	return ERRSTR("bad jbufsize"), -1;
-    // If there are jumbo frames, they cannot be too small either.
-    if (z->jbufsize && z->jbufsize <= (128<<10))
-	return ERRSTR("bad jbufsize"), -1;
-    // According to the spec, buf1size cannot be too big.
-    if (z->buf1size > zsize &&
-	z->buf1size > (128<<10) + LZ4_COMPRESSBOUND(128<<10) &&
-	z->buf1size > LZ4_COMPRESSBOUND(z->jbufsize))
 	return ERRSTR("bad buf1size"), -1;
 
     // Allocate the buffer, first will be used to read in the dictionary,
     // then data frames.  The uncompressed dictionary will be placed at
-    // the beginning, then goes the buf1size segment proper.  Need 12 extra
-    // bytes to peek at the next frame's header.
-    char *buf = malloc((64<<10) + z->buf1size + 12);
+    // the beginning, then goes the buf1size segment proper.
+    char *buf = malloc((64<<10) + z->buf1size);
     if (!buf)
 	return ERRNO("malloc"), -1;
-    // Read the dictionary data + the first frame's header.
-    ret = reada(z->fda, buf + (64 << 10), zsize + 12);
+    // Read the compressed dictionary.
+    ret = reada(z->fda, buf + (64 << 10), zsize);
     if (ret < 0)
 	return free(buf), ERRNO("read"), -1;
-    // Nothing after the dictionary?
-    if (ret == zsize) {
-	if (z->contentSize)
-	    return free(buf), ERRSTR("unexpected EOF"), -1;
-	return free(buf), 0;
-    }
-    if (ret != zsize + 12)
+    if (ret != zsize)
 	return free(buf), ERRSTR("unexpected EOF"), -1;
-    // Peek at the first frame's header.
-    memcpy(z->lead, buf + (64 << 10) + zsize, 12);
-    if (z->lead[0] != MAGIC4_W_ZPKGLIST_FRAME)
+
+    // The contentSize is non-zero, so we expect at least one data frame.
+    ret = reada(z->fda, z->lead, 12);
+    if (ret < 0)
+	return free(buf), ERRNO("read"), -1;
+    if (ret != 12)
+	return free(buf), ERRSTR("unexpected EOF"), -1;
+    // Verify the first data frame's magic.  Unless the magic is valid,
+    // we shouldn't even try to uncompress the dictionary - who knows
+    // what we've read?  Pushkin knows?
+    if (z->lead[0] != MAGIC4_W_ZPKGLIST_DATA)
 	return free(buf), ERRSTR("bad data frame magic"), -1;
-    // There is some data, it's time to check the contentSize.
-    if (!z->contentSize || z->contentSize < z->jbufsize)
-	return free(buf), ERRSTR("bad contentSize"), -1;
+
     // Decompress the dictionary.  The dictionary is placed right before
     // z->buf.  Compared to "external dictionary mode", this speeds up
     // subsequent decompression by a factor of 1.5.
@@ -195,7 +222,7 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
 	// Save the next frame's header for the next call.
 	memcpy(z->lead, zbuf + zsize, 12);
 	// Peek at the next frame's header.
-	if (z->lead[0] != MAGIC4_W_ZPKGLIST_FRAME)
+	if (z->lead[0] != MAGIC4_W_ZPKGLIST_DATA)
 	    return ERRSTR("bad data frame magic"), -1;
     }
 
