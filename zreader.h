@@ -32,7 +32,7 @@ int zreader_open(struct zreader **zp, struct fda *fda, const char *err[2])
 
 void zreader_free(struct zreader *z);
 
-// Get the frame with up to 4 header blobs.
+// Read the next frame with up to 4 header blobs.
 // Pointer to an internal buffer is returned via bufp.  If the mallocJumbo
 // mode is enabled, jumbo frames (unlike normal frames) will be malloc'd,
 // and ownership over the malloc'd chunk is transfered to the caller.

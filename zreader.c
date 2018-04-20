@@ -32,11 +32,15 @@
 
 struct zreader {
     struct fda *fda;
-    bool eof;
-    size_t contentSize;
-    size_t buf1size;
-    size_t jbufsize;
+    uint64_t contentSize;
+    size_t buf1size, jbufsize;
     char *buf1, *jbuf;
+    // The sum of (8 + uncompressed size) of the processed frames,
+    // should sum up to contentSize if the reads are sequential.
+    uint64_t contentSizeSoFar;
+    bool sequential;
+    // Stream status.
+    bool eof, err, pad;
     // Keeps the last 8 bytes of the dictionary which are clobbered
     // to and fro with the first header's magic.
     char save[8];
@@ -163,6 +167,7 @@ static int zreader_begin(struct zreader *z, const char *err[2])
     z->buf1 = buf + (64 << 10);
     z->jbuf = NULL;
     memcpy(z->save, z->buf1 - 8, 8);
+    z->sequential = true;
     return 1;
 }
 
@@ -184,8 +189,11 @@ int zreader_open(struct zreader **zp, struct fda *fda, const char *err[2])
 ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
 			 bool mallocJumbo, const char *err[2])
 {
+    if (z->err)
+	return ERRSTR("pending error"), -1;
     if (z->eof)
 	return 0;
+
     // The frame has already been peeked upon, decode the sizes.
     size_t zsize = le32toh(z->lead[1]) - 4;
     size_t size = le32toh(z->lead[2]);
@@ -193,37 +201,62 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
     // Validate the size, and check that zsize fits into the buffer.
     if (size > (128<<10)) {
 	if (size > z->jbufsize)
-	    return ERRSTR("bad data size"), -1;
+	    return ERRSTR("bad data size"), -(z->err = true);
 	if (zsize > z->buf1size)
-	    return ERRSTR("bad data zsize"), -1;
+	    return ERRSTR("bad data zsize"), -(z->err = true);
 	zbuf = z->buf1;
     }
     else {
-	if (!size)
-	    return ERRSTR("bad data size"), -1;
+	if (size < 8) // at least (il,dl)
+	    return ERRSTR("bad data size"), -(z->err = true);
 	if (size + zsize > z->buf1size)
-	    return ERRSTR("bad data size+zsize"), -1;
+	    return ERRSTR("bad data size+zsize"), -(z->err = true);
 	zbuf = z->buf1 + size;
     }
     // Further check that zsize is consistent with the size.
     if (!zsize || zsize > LZ4_COMPRESSBOUND(size))
-	return ERRSTR("bad data zsize"), -1;
+	return ERRSTR("bad data zsize"), -(z->err = true);
 
-    // Read this frame's data + the next frame's header.
+    // Check the size against contentSize.
+    z->contentSizeSoFar += 8 + size;
+    if (z->contentSizeSoFar > z->contentSize)
+	return ERRSTR("bad data size"), -(z->err = true);
+
+    // About to read, remember the position.
     off_t pos = tella(z->fda) - 12;
-    ssize_t ret = reada(z->fda, zbuf, zsize + 12);
+
+    // Read the frame's compressed data.
+    ssize_t ret = reada(z->fda, zbuf, zsize);
     if (ret < 0)
-	return ERRNO("read"), -1;
-    if (ret == zsize)
+	return ERRNO("read"), -(z->err = true);
+    if (ret != zsize)
+	return ERRSTR("unexpected EOF"), -(z->err = true);
+
+    // If the boundary with the next frame turns out to be
+    // unreliable, will need to use the safe decompression mode.
+    bool safer = false;
+
+    // Peek at the next frame.
+    ret = peeka(z->fda, z->lead, 12);
+    if (ret < 0)
+	return ERRNO("read"), -(z->err = true);
+    // Do we have the magic?
+    if (ret < 4 || z->lead[0] != MAGIC4_W_ZPKGLIST_DATA) {
+	// No magic, possibly EOF.  If the reads have been sequential,
+	// we have a reliable check for EOF based on contentSize.
+	if (z->sequential && z->contentSizeSoFar != z->contentSize)
+	    return ERRSTR("bad contentSize"), -(z->err = true);
+	// Assume it's EOF.
 	z->eof = true;
-    else if (ret != zsize + 12)
-	return ERRSTR("unexpected EOF"), -1;
+	// Extraneous data, boundary unreliable.
+	safer = ret > 0;
+    }
     else {
-	// Save the next frame's header for the next call.
-	memcpy(z->lead, zbuf + zsize, 12);
-	// Peek at the next frame's header.
-	if (z->lead[0] != MAGIC4_W_ZPKGLIST_DATA)
-	    return ERRSTR("bad data frame magic"), -1;
+	// Partial frame header?  No pasaran.
+	if (ret != 12)
+	    return ERRSTR("unexpected EOF"), -(z->err = true);
+	// Okay, taking it, as if with reada().
+	z->fda->cur += 12;
     }
 
     // Jumbo frame?
