@@ -109,7 +109,7 @@ int main(int argc, char **argv)
     ssize_t ret;
     if (!decode && !qf && !printsize) {
 	func = "zpkglistCompress";
-	ret = zpkglistCompress(0, 1, err, NULL, NULL);
+	ret = zpkglistCompress(0, 1, NULL, NULL, err);
 	if (ret == 0)
 	    warn("empty input (valid output still written)");
     }

@@ -28,16 +28,18 @@ extern "C" {
 #endif
 
 // Compress a list of rpm headers, such as produced by genpkglist,
-// into zpkglist file format (see README.md).  Returns 1 on success,
-// 0 on empty input (with valid output still written), -1 on error.
-// File descriptors remain open.
+// into zpkglist file format (see README.md).  Returns the number
+// of headers processed, 0 on empty input (with valid output still
+// written), -1 on error.  File descriptors remain open.
 // Information about an error is returned via the err[2] parameter:
 // the first string is typically a function name, and the second is
 // a string which describes the error.  Both strings normally come
 // from the read-only data section.
-int zpkglistCompress(int infd, int outfd, const char *err[2],
-		     void (*hash)(void *buf, size_t size, void *arg), void *arg)
-		     __attribute__((nonnull(3)));
+// Compressed inputs are permitted, and are decompressed automatically.
+// The uncompressed input can be further processed with the hash() function.
+ssize_t zpkglistCompress(int infd, int outfd,
+			 void (*hash)(const void *buf, size_t size, void *arg),
+			 void *arg, const char *err[2]) __attribute__((nonnull(5)));
 
 // For decompression, a more general "Reader" API is provided.
 struct zpkglistReader;
