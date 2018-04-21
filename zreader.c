@@ -232,10 +232,6 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
     if (ret != zsize)
 	return ERRSTR("unexpected EOF"), -(z->err = true);
 
-    // If the boundary with the next frame turns out to be
-    // unreliable, will need to use the safe decompression mode.
-    bool safer = false;
-
     // Peek at the next frame.
     ret = peeka(z->fda, z->lead, 12);
     if (ret < 0)
@@ -248,8 +244,6 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
 	    return ERRSTR("bad contentSize"), -(z->err = true);
 	// Assume it's EOF.
 	z->eof = true;
-	// Extraneous data, boundary unreliable.
-	safer = ret > 0;
     }
     else {
 	// Partial frame header?  No pasaran.
@@ -278,11 +272,15 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
 	    buf = z->jbuf;
 	}
 	if (!buf)
-	    return ERRNO("malloc"), -1;
+	    return ERRNO("malloc"), -(z->err = true);
 	// Uncompress without dictionary.
-	int zret = LZ4_decompress_fast(zbuf, buf, size);
-	if (zret != zsize)
-	    return ERROR("LZ4_decompress_fast", "decompression failed"), -1;
+	int zret = LZ4_decompress_safe(zbuf, buf, zsize, size);
+	if (zret != size) {
+	    if (buf != z->jbuf)
+		free(buf);
+	    return ERROR("LZ4_decompress_safe", "decompression failed"),
+		   -(z->err = true);
+	}
 	*bufp = buf;
 	// Malloc'd jumbo frame signaled with big negative return.
 	return buf == z->jbuf ? size : -size;
@@ -290,18 +288,12 @@ ssize_t zreader_getFrame(struct zreader *z, void **bufp, off_t *posp,
 
     // Restore the last bytes of the dictionary.
     memcpy(z->buf1 - 8, z->save, 8);
-    // Decompress the frame.  This "fast" function is somewhat unsafe: although
-    // it does not write past z->buf + size, it can read past z->zbuf + zsize.
-    // I opt for speed nonetheless.  This file format has not been designed for
-    // long-term storage, but rather for use with APT.  In this usage scenario,
-    // compressed package lists typically get updated with every "apt-get update"
-    // command, hence there are no checksums, etc.  Note that the overall file
-    // structure is checked rather meticulously (e.g. decompression doesn't even
-    // start before the next frame's magic is verified).  This should be enough
-    // to protect against unintended data corruption.
-    int zret = LZ4_decompress_fast_usingDict(zbuf, z->buf1, size, z->buf1 - (64 << 10), 64 << 10);
-    if (zret != zsize)
-	return ERROR("LZ4_decompress_fast_usingDict", "decompression failed"), -1;
+    // Uncompress with dictionary.
+    int zret = LZ4_decompress_safe_usingDict(zbuf, z->buf1, zsize, size,
+					     z->buf1 - (64 << 10), 64 << 10);
+    if (zret != size)
+	return ERROR("LZ4_decompress_safe_usingDict", "decompression failed"),
+	       -(z->err = true);
     // Prepend the magic, clobbers the last bytes of the dictionary.
     memcpy(z->buf1 - 8, headerMagic, 8);
     *bufp = z->buf1;
